@@ -1,0 +1,58 @@
+table-mapping:
+
+  tables:
+
+    employee:
+
+      columns:
+
+        id:
+          identifiers:
+            - emp_id
+            - employeeId
+            - id
+
+        name:
+          identifiers:
+            - emp_name
+            - employeeName
+            - name
+
+        age:
+          identifiers:
+            - age
+            - employeeAge
+
+        department:
+          identifiers:
+            - dept
+            - department
+
+        email:
+          identifiers:
+            - email
+            - emailAddress
+
+    address:
+
+      columns:
+
+        address:
+          identifiers:
+            - address
+            - street
+
+        city:
+          identifiers:
+            - city
+            - town
+
+        state:
+          identifiers:
+            - state
+            - province
+
+        country:
+          identifiers:
+            - country
+            - nation
