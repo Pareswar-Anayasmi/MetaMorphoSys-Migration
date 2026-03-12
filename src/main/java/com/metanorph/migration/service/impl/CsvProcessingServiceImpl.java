@@ -72,8 +72,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
             log.error("Failed to parse CSV input", exception);
 
-            throw new IllegalStateException(
-                    "CSV parsing failed. Please verify file format.", exception);
+            throw new IllegalStateException( "CSV parsing failed. Please verify file format.", exception);
         }
     }
 
@@ -86,15 +85,13 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
         if (tableMappingConfiguration.getTables() == null) {
 
-            throw new IllegalStateException(
-                    "table-mapping.tables configuration missing in YAML");
+            throw new IllegalStateException( "table-mapping.tables configuration missing in YAML");
         }
 
         tableMappingConfiguration.getTables()
                 .forEach((tableName, definition) -> {
 
                     log.debug("Initializing structure for table {}", tableName);
-
                     tableData.put(tableName, new ArrayList<>());
                 });
 
@@ -111,12 +108,9 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
         Set<String> csvHeaders = csvParser.getHeaderMap().keySet();
 
-        tableMappingConfiguration.getTables()
-                .forEach((tableName, definition) -> {
+        tableMappingConfiguration.getTables().forEach((tableName, definition) -> {
 
-                    Map<String, String> resolvedHeaders =
-                            HeaderResolverUtil.resolve(csvHeaders, definition);
-
+                    Map<String, String> resolvedHeaders =HeaderResolverUtil.resolve(csvHeaders, definition);
                     mappings.put(tableName, resolvedHeaders);
                 });
 
@@ -179,18 +173,21 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                             tableDefinition.getIdentifier(),
                             headerMap);
 
-                    if (identifierKey != null &&
-                            identifierCache.get(tableName).contains(identifierKey)) {
-
+                    if (identifierKey != null && identifierCache.get(tableName).contains(identifierKey)) {
                         log.debug("Duplicate row skipped for table {}", tableName);
                         return;
                     }
 
-                    Map<String, String> rowData =
-                            buildRowData(recordData, tableDefinition, headerMap);
+//                    Map<String, String> rowData =
+//                            buildRowData(recordData, tableDefinition, headerMap);
+                    Map<String, String> rowData = buildRowData(recordData, tableDefinition, headerMap);
+
+                    if (rowData == null) {
+                        return;
+                    }
+
 
                     if (shouldSkipRow(rowData, tableDefinition)) {
-
                         log.debug("Skipping empty row for table {}", tableName);
                         return;
                     }
@@ -254,26 +251,44 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     /* --------------------------------------------------
        1️⃣ Inject parent reference column first
     -------------------------------------------------- */
+//
+//        if (tableDefinition.getParentReference() != null) {
+//
+//            String parentColumn = tableDefinition.getParentReference();
+//
+//            try {
+//
+//                String value = recordData.get(parentColumn);
+//
+//                if (value != null && !value.isBlank()) {
+//                    rowData.put(parentColumn, value.trim());
+//                }
+//
+//            } catch (IllegalArgumentException ex) {
+//
+//                log.warn( "Parent reference column '{}' not found in CSV", parentColumn );
+//            }
+//        }
 
         if (tableDefinition.getParentReference() != null) {
 
             String parentColumn = tableDefinition.getParentReference();
 
+            String parentValue = "";
+
             try {
+                parentValue = recordData.get(parentColumn);
+            } catch (Exception ignored) {}
 
-                String value = recordData.get(parentColumn);
+            if (parentValue == null || parentValue.isBlank()) {
 
-                if (value != null && !value.isBlank()) {
-                    rowData.put(parentColumn, value.trim());
-                }
+                log.debug("Skipping row because parent reference '{}' is missing",
+                        parentColumn);
 
-            } catch (IllegalArgumentException ex) {
-
-                log.warn(
-                        "Parent reference column '{}' not found in CSV",
-                        parentColumn
-                );
+                return null;
             }
+
+            rowData.put(parentColumn, parentValue.trim());
         }
 
     /* --------------------------------------------------
