@@ -16,6 +16,16 @@ public class TableMappingConfiguration {
     @Data
     public static class TableDefinition {
 
+        private List<String> identifier;
+
+        private String parent;    //is table has
+
+        private String parentReference;  //parent table reference
+
+        private List<String> children;   //is table has child
+
+        private Boolean skipIfEmpty = false;
+
         private Map<String, ColumnDefinition> columns;
     }
 

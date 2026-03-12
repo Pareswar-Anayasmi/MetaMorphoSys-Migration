@@ -1,16 +1,21 @@
 table-mapping:
-
   tables:
 
-    employee:
+    client:
+
+      identifier:
+        - clientId
+
+      skipIfEmpty: true
 
       columns:
 
-        id:
+        clientId:
           identifiers:
             - emp_id
             - employeeId
             - id
+            - clientId
 
         name:
           identifiers:
@@ -33,7 +38,23 @@ table-mapping:
             - email
             - emailAddress
 
+      children:
+        - address
+
+
     address:
+
+      parent: client
+
+      parentReference: clientId
+
+      skipIfEmpty: true
+
+      identifier:
+        - address
+        - city
+        - state
+        - country
 
       columns:
 
@@ -56,3 +77,41 @@ table-mapping:
           identifiers:
             - country
             - nation
+
+      children:
+        - contact
+
+
+    contact:
+
+      parent: address
+
+      parentReference: address
+
+      identifier:
+        - phone
+
+      skipIfEmpty: true
+
+      columns:
+
+        phone:
+          identifiers:
+            - phone
+            - mobile
+            - contactNumber
+
+        contactType:
+          identifiers:
+            - contactType
+            - type
+
+        extension:
+          identifiers:
+            - extension
+            - ext
+
+        availability:
+          identifiers:
+            - availability
+            - time
