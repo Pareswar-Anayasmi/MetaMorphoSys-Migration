@@ -178,8 +178,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                         return;
                     }
 
-//                    Map<String, String> rowData =
-//                            buildRowData(recordData, tableDefinition, headerMap);
                     Map<String, String> rowData = buildRowData(recordData, tableDefinition, headerMap);
 
                     if (rowData == null) {
@@ -204,42 +202,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      * Build row data for a specific table.
      * Also inject parent reference column if configured.
      */
-//    private Map<String, String> buildRowData(
-//            final CSVRecord recordData,
-//            final TableMappingConfiguration.TableDefinition tableDefinition,
-//            final Map<String, String> headerMap) {
-//
-//        Map<String, String> rowData = new LinkedHashMap<>();
-//
-//        // Populate configured columns
-//        tableDefinition.getColumns()
-//                .forEach((columnName, columnDefinition) -> {
-//
-//                    String header = headerMap.get(columnName);
-//
-//                    String value = "";
-//
-//                    if (header != null) {
-//                        value = recordData.get(header);
-//                    }
-//
-//                    rowData.put(columnName, value == null ? "" : value.trim());
-//                });
-//
-//        // Inject parent reference if configured
-//        if (tableDefinition.getParentReference() != null) {
-//
-//            String parentColumn = tableDefinition.getParentReference();
-//
-//            String header = headerMap.get(parentColumn);
-//
-//            if (header != null) {
-//                rowData.put(parentColumn, recordData.get(header));
-//            }
-//        }
-//
-//        return rowData;
-//    }
 
     private Map<String, String> buildRowData(
             final CSVRecord recordData,
@@ -251,41 +213,16 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     /* --------------------------------------------------
        1️⃣ Inject parent reference column first
     -------------------------------------------------- */
-//
-//        if (tableDefinition.getParentReference() != null) {
-//
-//            String parentColumn = tableDefinition.getParentReference();
-//
-//            try {
-//
-//                String value = recordData.get(parentColumn);
-//
-//                if (value != null && !value.isBlank()) {
-//                    rowData.put(parentColumn, value.trim());
-//                }
-//
-//            } catch (IllegalArgumentException ex) {
-//
-//                log.warn( "Parent reference column '{}' not found in CSV", parentColumn );
-//            }
-//        }
 
         if (tableDefinition.getParentReference() != null) {
 
             String parentColumn = tableDefinition.getParentReference();
 
-            String parentValue = "";
-
-            try {
-                parentValue = recordData.get(parentColumn);
-            } catch (Exception ignored) {}
+            String parentValue = recordData.isMapped(parentColumn) ? recordData.get(parentColumn) : "";
 
             if (parentValue == null || parentValue.isBlank()) {
-
-                log.debug("Skipping row because parent reference '{}' is missing",
-                        parentColumn);
-
-                return null;
+                log.debug("Skipping row because parent reference '{}' is missing", parentColumn);
+                return Collections.emptyMap();
             }
 
             rowData.put(parentColumn, parentValue.trim());
