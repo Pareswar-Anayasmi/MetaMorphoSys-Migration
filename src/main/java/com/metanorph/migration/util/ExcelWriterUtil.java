@@ -6,6 +6,8 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 
 public final class ExcelWriterUtil {
 
@@ -25,32 +27,37 @@ public final class ExcelWriterUtil {
                 return;
             }
 
+            List<String> headers = resolveHeaders(rows);
+
             Row headerRow = sheet.createRow(0);
-
-            int columnIndex = 0;
-
-            for (String column : rows.get(0).keySet()) {
-
-                headerRow.createCell(columnIndex++)
-                        .setCellValue(column);
+            for (int columnIndex = 0; columnIndex < headers.size(); columnIndex++) {
+                headerRow.createCell(columnIndex).setCellValue(headers.get(columnIndex));
             }
 
             int rowIndex = 1;
-
             for (Map<String, String> rowData : rows) {
-
                 Row row = sheet.createRow(rowIndex++);
 
-                int cellIndex = 0;
-
-                for (String value : rowData.values()) {
-
-                    row.createCell(cellIndex++)
-                            .setCellValue(value);
+                for (int columnIndex = 0; columnIndex < headers.size(); columnIndex++) {
+                    String header = headers.get(columnIndex);
+                    String value = rowData.getOrDefault(header, "");
+                    row.createCell(columnIndex).setCellValue(value);
                 }
             }
         });
 
         return workbook;
+    }
+
+    private static List<String> resolveHeaders(List<Map<String, String>> rows) {
+        Map<String, Boolean> seen = new LinkedHashMap<>();
+
+        for (Map<String, String> rowData : rows) {
+            for (String key : rowData.keySet()) {
+                seen.putIfAbsent(key, Boolean.TRUE);
+            }
+        }
+
+        return new ArrayList<>(seen.keySet());
     }
 }

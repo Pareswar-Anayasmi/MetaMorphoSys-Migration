@@ -1,11 +1,11 @@
 package com.metanorph.migration.service.impl;
 
 import com.metanorph.migration.config.TableMappingConfiguration;
+import com.metanorph.migration.config.TableMappingConfiguration.TableDefinition;
 import com.metanorph.migration.service.CsvProcessingService;
 import com.metanorph.migration.util.CsvReaderUtil;
 import com.metanorph.migration.util.ExcelWriterUtil;
 import com.metanorph.migration.util.HeaderResolverUtil;
-import com.metanorph.migration.util.IdentifierUtil;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,14 +20,16 @@ import java.io.Reader;
 import java.util.*;
 
 /**
- * Service responsible for processing CSV input
- * and generating Excel output based on YAML configuration.
+ * Processes a flat CSV file and produces a multi-sheet Excel workbook.
  *
- * Supports:
- * - Table hierarchy
- * - Identifier based deduplication
- * - Parent reference propagation
- * - Empty row skipping
+ * <p>For every CSV row the following records are always created (no deduplication):
+ * <ol>
+ *   <li>client       – new GUID generated as {@code client_guid}</li>
+ *   <li>address      – {@code client_guid} injected as FK, new GUID as {@code address_guid}</li>
+ *   <li>contact      – {@code address_guid} injected as FK</li>
+ *   <li>nomineeClient – created only when nominee columns are present; new GUID as {@code nominee_client_guid}</li>
+ *   <li>benefit      – {@code nominee_client_guid} + {@code client_guid} injected as FKs</li>
+ * </ol>
  */
 @Slf4j
 @Service
@@ -36,232 +38,264 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private final TableMappingConfiguration tableMappingConfiguration;
 
-    /**
-     * Entry method invoked by controller.
-     */
+    // ── Entry point ───────────────────────────────────────────────────────────
+
     @Override
     public Workbook processCsv(final Reader reader) {
 
         log.info("Starting CSV processing");
 
         final CSVParser csvParser = createCsvParser(reader);
-
         final Map<String, List<Map<String, String>>> tableData = initializeTableStructure();
-
         final Map<String, Map<String, String>> headerMappings = resolveHeaderMappings(csvParser);
 
-        final Map<String, Set<String>> identifierCache = initializeIdentifierCache();
-
-        processCsvRecords(csvParser, tableData, headerMappings, identifierCache);
-
-        log.info("CSV processing completed successfully");
-
-        return ExcelWriterUtil.write(tableData);
-    }
-
-    /**
-     * Create CSV parser.
-     */
-    private CSVParser createCsvParser(final Reader reader) {
-
-        try {
-            log.debug("Parsing CSV input");
-            return CsvReaderUtil.parse(reader);
-
-        } catch (IOException exception) {
-
-            log.error("Failed to parse CSV input", exception);
-
-            throw new IllegalStateException( "CSV parsing failed. Please verify file format.", exception);
-        }
-    }
-
-    /**
-     * Initialize output table containers.
-     */
-    private Map<String, List<Map<String, String>>> initializeTableStructure() {
-
-        Map<String, List<Map<String, String>>> tableData = new LinkedHashMap<>();
-
-        if (tableMappingConfiguration.getTables() == null) {
-
-            throw new IllegalStateException( "table-mapping.tables configuration missing in YAML");
-        }
-
-        tableMappingConfiguration.getTables()
-                .forEach((tableName, definition) -> {
-
-                    log.debug("Initializing structure for table {}", tableName);
-                    tableData.put(tableName, new ArrayList<>());
-                });
-
-        return tableData;
-    }
-
-    /**
-     * Resolve CSV headers using configured YAML identifiers.
-     */
-    private Map<String, Map<String, String>> resolveHeaderMappings(
-            final CSVParser csvParser) {
-
-        Map<String, Map<String, String>> mappings = new HashMap<>();
-
-        Set<String> csvHeaders = csvParser.getHeaderMap().keySet();
-
-        tableMappingConfiguration.getTables().forEach((tableName, definition) -> {
-
-                    Map<String, String> resolvedHeaders =HeaderResolverUtil.resolve(csvHeaders, definition);
-                    mappings.put(tableName, resolvedHeaders);
-                });
-
-        return mappings;
-    }
-
-    /**
-     * Cache used for identifier based deduplication.
-     */
-    private Map<String, Set<String>> initializeIdentifierCache() {
-
-        Map<String, Set<String>> cache = new HashMap<>();
-
-        tableMappingConfiguration.getTables()
-                .keySet()
-                .forEach(table -> cache.put(table, new HashSet<>()));
-
-        return cache;
-    }
-
-    /**
-     * Iterate CSV rows.
-     */
-    private void processCsvRecords(
-            final CSVParser csvParser,
-            final Map<String, List<Map<String, String>>> tableData,
-            final Map<String, Map<String, String>> headerMappings,
-            final Map<String, Set<String>> identifierCache) {
-
         int rowNumber = 0;
-
-        for (CSVRecord recordData : csvParser) {
-
+        for (CSVRecord csvRecord : csvParser) {
             rowNumber++;
-
             log.debug("Processing CSV row {}", rowNumber);
-
-            processSingleRecord(recordData, tableData, headerMappings, identifierCache);
+            processSingleRecord(csvRecord, tableData, headerMappings);
         }
 
         log.info("Total CSV rows processed: {}", rowNumber);
+        return ExcelWriterUtil.write(tableData);
     }
 
+    // ── Per-row processing ────────────────────────────────────────────────────
+
     /**
-     * Process a single CSV record.
+     * Processes one CSV row across all configured tables.
+     * A fresh {@code guidContext} is created per row so GUIDs never leak between rows.
      */
     private void processSingleRecord(
-            final CSVRecord recordData,
+            final CSVRecord csvRecord,
             final Map<String, List<Map<String, String>>> tableData,
-            final Map<String, Map<String, String>> headerMappings,
-            final Map<String, Set<String>> identifierCache) {
+            final Map<String, Map<String, String>> headerMappings) {
 
-        tableMappingConfiguration.getTables()
-                .forEach((tableName, tableDefinition) -> {
+        final Map<String, String> guidContext = new HashMap<>();
 
-                    Map<String, String> headerMap = headerMappings.get(tableName);
-
-                    String identifierKey = IdentifierUtil.buildIdentifier(
-                            recordData,
-                            tableDefinition.getIdentifier(),
-                            headerMap);
-
-                    if (identifierKey != null && identifierCache.get(tableName).contains(identifierKey)) {
-                        log.debug("Duplicate row skipped for table {}", tableName);
-                        return;
-                    }
-
-                    Map<String, String> rowData = buildRowData(recordData, tableDefinition, headerMap);
-
-                    if (rowData == null) {
-                        return;
-                    }
-
-
-                    if (shouldSkipRow(rowData, tableDefinition)) {
-                        log.debug("Skipping empty row for table {}", tableName);
-                        return;
-                    }
-
-                    tableData.get(tableName).add(rowData);
-
-                    if (identifierKey != null) {
-                        identifierCache.get(tableName).add(identifierKey);
-                    }
-                });
+        tableMappingConfiguration.getTables().forEach((tableName, tableDef) ->
+                processTable(tableName, tableDef, csvRecord, headerMappings, tableData, guidContext));
     }
 
     /**
-     * Build row data for a specific table.
-     * Also inject parent reference column if configured.
+     * Builds, optionally assigns a GUID to, and stores one row for a single table.
      */
+    private void processTable(
+            final String tableName,
+            final TableDefinition tableDef,
+            final CSVRecord csvRecord,
+            final Map<String, Map<String, String>> headerMappings,
+            final Map<String, List<Map<String, String>>> tableData,
+            final Map<String, String> guidContext) {
 
-    private Map<String, String> buildRowData(
-            final CSVRecord recordData,
-            final TableMappingConfiguration.TableDefinition tableDefinition,
-            final Map<String, String> headerMap) {
+        final Map<String, String> headerMap = headerMappings.get(tableName);
+        Map<String, String> rowData = buildRowData(csvRecord, tableDef, headerMap, guidContext);
 
-        Map<String, String> rowData = new LinkedHashMap<>();
-
-    /* --------------------------------------------------
-       1️⃣ Inject parent reference column first
-    -------------------------------------------------- */
-
-        if (tableDefinition.getParentReference() != null) {
-
-            String parentColumn = tableDefinition.getParentReference();
-
-            String parentValue = recordData.isMapped(parentColumn) ? recordData.get(parentColumn) : "";
-
-            if (parentValue == null || parentValue.isBlank()) {
-                log.debug("Skipping row because parent reference '{}' is missing", parentColumn);
-                return Collections.emptyMap();
-            }
-
-            rowData.put(parentColumn, parentValue.trim());
+        if (rowData == null) {
+            log.debug("Row skipped for table '{}' – parent GUID missing", tableName);
+            return;
         }
 
-    /* --------------------------------------------------
-       2️⃣ Populate normal configured columns
-    -------------------------------------------------- */
+        if (shouldSkipRow(rowData, tableDef)) {
+            log.debug("Skipping empty row for table '{}'", tableName);
+            return;
+        }
 
-        tableDefinition.getColumns()
-                .forEach((columnName, columnDefinition) -> {
+        rowData = assignGuidIfRequired(tableName, tableDef, rowData, guidContext);
 
-                    String header = headerMap.get(columnName);
+        final String outputTableName = resolveOutputTableName(tableName, tableDef);
+        tableData.get(outputTableName).add(rowData);
+    }
 
-                    String value = "";
+    // ── Row builder ───────────────────────────────────────────────────────────
 
-                    if (header != null) {
-                        value = recordData.get(header);
-                    }
+    /**
+     * Assembles a row map for the given table.
+     * Returns {@code null} when a required FK GUID is not yet available (parent was skipped).
+     */
+    private Map<String, String> buildRowData(
+            final CSVRecord csvRecord,
+            final TableDefinition tableDef,
+            final Map<String, String> headerMap,
+            final Map<String, String> guidContext) {
 
-                    rowData.put(columnName, value == null ? "" : value.trim());
-                });
+        final Map<String, String> rowData = new LinkedHashMap<>();
 
+        if (!injectParentGuidRef(tableDef, guidContext, rowData)) {
+            return null;
+        }
+
+        if (!injectRootGuidRef(tableDef, guidContext, rowData)) {
+            return null;
+        }
+
+        populateColumns(csvRecord, tableDef, headerMap, rowData);
         return rowData;
     }
 
     /**
-     * Skip row if configured and all columns empty.
+     * Injects the parent table's GUID as a FK column.
+     * Returns {@code false} when the parent GUID is absent (parent row was skipped).
      */
-    private boolean shouldSkipRow(
-            final Map<String, String> rowData,
-            final TableMappingConfiguration.TableDefinition tableDefinition) {
+    private boolean injectParentGuidRef(
+            final TableDefinition tableDef,
+            final Map<String, String> guidContext,
+            final Map<String, String> rowData) {
 
-        if (!Boolean.TRUE.equals(tableDefinition.getSkipIfEmpty())) {
+        if (tableDef.getParent() == null || tableDef.getParentGuidRef() == null) {
+            return true;
+        }
+
+        final String parentGuid = guidContext.get(tableDef.getParent());
+
+        if (parentGuid == null || parentGuid.isBlank()) {
+            log.debug("Parent '{}' has no GUID in context – child row will be skipped", tableDef.getParent());
             return false;
         }
 
-        return rowData.values()
-                .stream()
-                .allMatch(value -> value == null || value.isEmpty());
+        rowData.put(tableDef.getParentGuidRef(), parentGuid);
+        return true;
+    }
+
+    /**
+     * Injects the root client GUID as a FK column (used by the benefit table).
+     * Returns {@code false} when the root GUID is absent.
+     */
+    private boolean injectRootGuidRef(
+            final TableDefinition tableDef,
+            final Map<String, String> guidContext,
+            final Map<String, String> rowData) {
+
+        if (tableDef.getRootGuidRef() == null) {
+            return true;
+        }
+
+        final String rootGuid = guidContext.get("client");
+
+        if (rootGuid == null || rootGuid.isBlank()) {
+            log.debug("Root client GUID missing in context – row will be skipped");
+            return false;
+        }
+
+        rowData.put(tableDef.getRootGuidRef(), rootGuid);
+        return true;
+    }
+
+    /**
+     * Reads each configured column value from the CSV record and stores it in {@code rowData}.
+     */
+    private void populateColumns(
+            final CSVRecord csvRecord,
+            final TableDefinition tableDef,
+            final Map<String, String> headerMap,
+            final Map<String, String> rowData) {
+
+        if (tableDef.getColumns() == null) {
+            return;
+        }
+
+        tableDef.getColumns().forEach((columnName, columnDef) -> {
+            final String header = headerMap != null ? headerMap.get(columnName) : null;
+            final String value  = header != null ? csvRecord.get(header) : "";
+            rowData.put(columnName, value == null ? "" : value.trim());
+        });
+    }
+
+    /**
+     * Generates a UUID for tables that declare a {@code guidColumn},
+     * prepends it to the row map, and stores it in {@code guidContext}.
+     */
+    private Map<String, String> assignGuidIfRequired(
+            final String tableName,
+            final TableDefinition tableDef,
+            final Map<String, String> rowData,
+            final Map<String, String> guidContext) {
+
+        if (tableDef.getGuidColumn() == null) {
+            return rowData;
+        }
+
+        final String guid = UUID.randomUUID().toString();
+        final Map<String, String> ordered = new LinkedHashMap<>();
+        ordered.put(tableDef.getGuidColumn(), guid);
+        ordered.putAll(rowData);
+        guidContext.put(tableName, guid);
+
+        log.debug("Generated GUID {} for table '{}'", guid, tableName);
+        return ordered;
+    }
+
+    // ── Skip-row evaluation ───────────────────────────────────────────────────
+
+    /**
+     * Returns {@code true} when {@code skipIfEmpty = true} is configured and
+     * all non-FK column values are blank.
+     */
+    private boolean shouldSkipRow(
+            final Map<String, String> rowData,
+            final TableDefinition tableDef) {
+
+        if (!Boolean.TRUE.equals(tableDef.getSkipIfEmpty())) {
+            return false;
+        }
+
+        final Set<String> fkColumns = buildFkColumnSet(tableDef);
+
+        return rowData.entrySet().stream()
+                .filter(entry -> !fkColumns.contains(entry.getKey()))
+                .allMatch(entry -> entry.getValue() == null || entry.getValue().isEmpty());
+    }
+
+    private Set<String> buildFkColumnSet(final TableDefinition tableDef) {
+        final Set<String> fkColumns = new HashSet<>();
+        if (tableDef.getParentGuidRef() != null) fkColumns.add(tableDef.getParentGuidRef());
+        if (tableDef.getRootGuidRef()   != null) fkColumns.add(tableDef.getRootGuidRef());
+        return fkColumns;
+    }
+
+    // ── Infrastructure helpers ────────────────────────────────────────────────
+
+    private CSVParser createCsvParser(final Reader reader) {
+        try {
+            return CsvReaderUtil.parse(reader);
+        } catch (IOException ex) {
+            log.error("Failed to parse CSV input", ex);
+            throw new IllegalStateException("CSV parsing failed. Please verify the file format.", ex);
+        }
+    }
+
+    private Map<String, List<Map<String, String>>> initializeTableStructure() {
+
+        if (tableMappingConfiguration.getTables() == null) {
+            throw new IllegalStateException("table-mapping.tables configuration is missing in YAML.");
+        }
+
+        final Map<String, List<Map<String, String>>> tableData = new LinkedHashMap<>();
+
+        tableMappingConfiguration.getTables().forEach((logicalName, def) -> {
+            final String outputTableName = resolveOutputTableName(logicalName, def);
+            tableData.putIfAbsent(outputTableName, new ArrayList<>());
+        });
+
+        return tableData;
+    }
+
+    private String resolveOutputTableName(final String logicalTableName, final TableDefinition tableDef) {
+        if (tableDef.getTableName() == null || tableDef.getTableName().isBlank()) {
+            return logicalTableName;
+        }
+        return tableDef.getTableName().trim();
+    }
+
+    private Map<String, Map<String, String>> resolveHeaderMappings(final CSVParser csvParser) {
+
+        final Map<String, Map<String, String>> mappings = new HashMap<>();
+        final Set<String> csvHeaders = csvParser.getHeaderMap().keySet();
+
+        tableMappingConfiguration.getTables().forEach((tableName, def) ->
+                mappings.put(tableName, HeaderResolverUtil.resolve(csvHeaders, def)));
+
+        return mappings;
     }
 }
+

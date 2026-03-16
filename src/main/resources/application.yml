@@ -1,10 +1,13 @@
 table-mapping:
   tables:
 
+    # ─────────────────────────────────────────────
+    # PRIMARY CLIENT
+    # A new GUID is generated for every CSV row.
+    # ─────────────────────────────────────────────
     client:
 
-      identifier:
-        - clientId
+      guidColumn: client_guid          # column name that will hold the generated GUID
 
       skipIfEmpty: true
 
@@ -42,19 +45,18 @@ table-mapping:
         - address
 
 
+    # ─────────────────────────────────────────────
+    # ADDRESS
+    # Holds client_guid as foreign key (set by code).
+    # ─────────────────────────────────────────────
     address:
 
-      parent: client
+      guidColumn: address_guid         # GUID generated for this address row
 
-      parentReference: clientId
+      parent: client
+      parentGuidRef: client_guid       # FK column injected from parent GUID
 
       skipIfEmpty: true
-
-      identifier:
-        - address
-        - city
-        - state
-        - country
 
       columns:
 
@@ -82,14 +84,15 @@ table-mapping:
         - contact
 
 
+    # ─────────────────────────────────────────────
+    # CONTACT
+    # Holds address_guid as foreign key (set by code).
+    # ─────────────────────────────────────────────
     contact:
 
+      guidColumn: contact_guid
       parent: address
-
-      parentReference: address
-
-      identifier:
-        - phone
+      parentGuidRef: address_guid      # FK column injected from parent GUID
 
       skipIfEmpty: true
 
@@ -115,3 +118,75 @@ table-mapping:
           identifiers:
             - availability
             - time
+
+
+    # ─────────────────────────────────────────────
+    # NOMINEE CLIENT
+    # Nominee columns are prefixed with "nominee_" in CSV.
+    # Inserts another row into the client sheet.
+    # ─────────────────────────────────────────────
+    nomineeClient:
+
+      tableName: client                # write nominee rows into client output table
+      guidColumn: client_guid          # nominee client also gets a client_guid
+
+      sourcePrefix: nominee_           # all CSV columns for this table are prefixed
+
+      skipIfEmpty: true
+
+      columns:
+        clientId:
+          identifiers:
+            - nominee_emp_id
+
+        name:
+          identifiers:
+            - nominee_name
+
+        age:
+          identifiers:
+            - nominee_age
+
+        email:
+          identifiers:
+            - nominee_email
+
+        relationship:
+          identifiers:
+            - nominee_relationship
+            - relationship
+
+      children:
+        - benefit
+
+
+    # ─────────────────────────────────────────────
+    # BENEFIT
+    # Links primary client GUID ↔ nominee client GUID.
+    # ─────────────────────────────────────────────
+    benefit:
+
+      parent: nomineeClient
+      parentGuidRef: nominee_client_guid   # FK from nominee
+
+      rootGuidRef: client_guid             # FK from root (primary) client
+
+      skipIfEmpty: true
+
+      columns:
+
+        benefitType:
+          identifiers:
+            - benefit_type
+            - benefitType
+
+        benefitAmount:
+          identifiers:
+            - benefit_amount
+            - benefitAmount
+
+        benefitPercentage:
+          identifiers:
+            - benefit_percentage
+            - benefitPercentage
+

@@ -1,35 +1,13 @@
 package com.metanorph.migration.util;
 
-import org.apache.commons.csv.CSVRecord;
-import java.util.List;
-import java.util.Map;
-
-
+/**
+ * Previously used for identifier-based deduplication.
+ * Deduplication has been removed; every CSV row always produces fresh records.
+ * Class retained to avoid breaking any future references.
+ */
 public final class IdentifierUtil {
 
-    private IdentifierUtil(){}
-
-    public static String buildIdentifier(
-            CSVRecord recordData,
-            List<String> identifiers,
-            Map<String,String> headerMap){
-
-        // If identifier not configured, skip deduplication
-        if(identifiers == null || identifiers.isEmpty()){
-            return null;
-        }
-
-        StringBuilder key = new StringBuilder();
-
-        for(String column : identifiers){
-
-            String header = headerMap.get(column);
-
-            if(header != null){
-                key.append(recordData.get(header).trim()).append("|");
-            }
-        }
-
-        return key.toString();
+    private IdentifierUtil() {
+        throw new UnsupportedOperationException("Utility class");
     }
 }
