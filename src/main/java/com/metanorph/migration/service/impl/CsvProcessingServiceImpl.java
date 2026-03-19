@@ -88,16 +88,18 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final Map<String, List<Map<String, String>>> tableData,
             final Map<String, String> guidContext) {
 
+        final String currentTableGuid = prepareGuidForTable(tableName, tableDef, guidContext);
         final Map<String, String> headerMap = headerMappings.get(tableName);
-        Map<String, String> rowData = buildRowData(csvRecord, tableDef, headerMap, guidContext);
+        Map<String, String> rowData = buildRowData(csvRecord, tableDef, headerMap, currentTableGuid, guidContext);
 
         if (rowData == null) {
-            log.debug("Row skipped for table '{}' – parent GUID missing", tableName);
+            log.debug("Row skipped for table '{}' - parent GUID missing", tableName);
             return;
         }
 
         if (shouldSkipRow(rowData, tableDef)) {
             log.debug("Skipping empty row for table '{}'", tableName);
+            discardPreparedGuidIfUnused(tableName, currentTableGuid, guidContext);
             return;
         }
 
@@ -117,30 +119,29 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final CSVRecord csvRecord,
             final TableDefinition tableDef,
             final Map<String, String> headerMap,
+            final String currentTableGuid,
             final Map<String, String> guidContext) {
 
+        // Validate parent / root GUIDs exist before building the row
+        if (!validateParentGuidPresent(tableDef, guidContext)) {
+            return null;
+        }
+        if (!validateRootGuidPresent(tableDef, guidContext)) {
+            return null;
+        }
+
         final Map<String, String> rowData = new LinkedHashMap<>();
-
-        if (!injectParentGuidRef(tableDef, guidContext, rowData)) {
-            return null;
-        }
-
-        if (!injectRootGuidRef(tableDef, guidContext, rowData)) {
-            return null;
-        }
-
-        populateColumns(csvRecord, tableDef, headerMap, rowData);
+        populateColumns(csvRecord, tableDef, headerMap, currentTableGuid, rowData, guidContext);
         return rowData;
     }
 
     /**
-     * Injects the parent table's GUID as a FK column.
-     * Returns {@code false} when the parent GUID is absent (parent row was skipped).
+     * Validates the parent table's GUID exists in context (parent row was not skipped).
+     * Does NOT write anything to rowData – placement is handled inside populateColumns via column definitions.
      */
-    private boolean injectParentGuidRef(
+    private boolean validateParentGuidPresent(
             final TableDefinition tableDef,
-            final Map<String, String> guidContext,
-            final Map<String, String> rowData) {
+            final Map<String, String> guidContext) {
 
         if (tableDef.getParent() == null || tableDef.getParentGuidRef() == null) {
             return true;
@@ -153,52 +154,163 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             return false;
         }
 
-        rowData.put(tableDef.getParentGuidRef(), parentGuid);
         return true;
     }
 
     /**
-     * Injects the root client GUID as a FK column (used by the benefit table).
-     * Returns {@code false} when the root GUID is absent.
+     * Validates the root table's GUID exists in context.
+     * Does NOT write anything to rowData – placement is handled inside populateColumns via column definitions.
      */
-    private boolean injectRootGuidRef(
+    private boolean validateRootGuidPresent(
             final TableDefinition tableDef,
-            final Map<String, String> guidContext,
-            final Map<String, String> rowData) {
+            final Map<String, String> guidContext) {
 
         if (tableDef.getRootGuidRef() == null) {
             return true;
         }
 
-        final String rootGuid = guidContext.get("client");
+        final String rootGuid = guidContext.get(tableDef.getRootTable() != null ? tableDef.getRootTable() : "client");
 
         if (rootGuid == null || rootGuid.isBlank()) {
-            log.debug("Root client GUID missing in context – row will be skipped");
+            log.debug("Root GUID missing in context – row will be skipped");
             return false;
         }
 
-        rowData.put(tableDef.getRootGuidRef(), rootGuid);
         return true;
     }
 
     /**
      * Reads each configured column value from the CSV record and stores it in {@code rowData}.
+     * FK columns (parentGuidRef / rootGuidRef) are resolved from {@code guidContext}
+     * when a column's identifier matches those sentinel keys.
      */
     private void populateColumns(
             final CSVRecord csvRecord,
             final TableDefinition tableDef,
             final Map<String, String> headerMap,
-            final Map<String, String> rowData) {
+            final String currentTableGuid,
+            final Map<String, String> rowData,
+            final Map<String, String> guidContext) {
 
         if (tableDef.getColumns() == null) {
             return;
         }
 
         tableDef.getColumns().forEach((columnName, columnDef) -> {
+
+            // 1. FK column whose identifier matches parentGuidRef → pull parent's GUID from context
+            if (isParentGuidRefColumn(tableDef, columnDef)) {
+                final String parentGuid = guidContext.get(tableDef.getParent());
+                rowData.put(columnName, parentGuid != null ? parentGuid : "");
+                return;
+            }
+
+            // 2. FK column whose identifier matches rootGuidRef → pull root table's GUID from context
+            if (isRootGuidRefColumn(tableDef, columnDef)) {
+                final String rootTable = tableDef.getRootTable() != null ? tableDef.getRootTable() : "client";
+                final String rootGuid = guidContext.get(rootTable);
+                rowData.put(columnName, rootGuid != null ? rootGuid : "");
+                return;
+            }
+
+            // 3. Column whose identifier matches the table's own guidColumn → use generated GUID
+            if (isGuidIdentifierColumn(tableDef, columnDef, currentTableGuid)) {
+                rowData.put(columnName, currentTableGuid != null ? currentTableGuid : "");
+                return;
+            }
+
+            // 4. Normal CSV-mapped column
             final String header = headerMap != null ? headerMap.get(columnName) : null;
-            final String value  = header != null ? csvRecord.get(header) : "";
-            rowData.put(columnName, value == null ? "" : value.trim());
+            if (header != null) {
+                final String value = csvRecord.get(header);
+                rowData.put(columnName, value == null ? "" : value.trim());
+                return;
+            }
+
+            // 5. No mapping found – write empty value
+            rowData.put(columnName, "");
         });
+    }
+
+    /**
+     * Returns {@code true} when ALL of the column's identifiers equal the configured {@code parentGuidRef}.
+     * Specifically: any identifier that exactly matches tableDef.getParentGuidRef().
+     */
+    private boolean isParentGuidRefColumn(
+            final TableDefinition tableDef,
+            final TableMappingConfiguration.ColumnDefinition columnDef) {
+
+        if (tableDef.getParent() == null || tableDef.getParentGuidRef() == null) {
+            return false;
+        }
+        if (columnDef == null || columnDef.getIdentifiers() == null) {
+            return false;
+        }
+        return columnDef.getIdentifiers().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .anyMatch(id -> id.equalsIgnoreCase(tableDef.getParentGuidRef()));
+    }
+
+    /**
+     * Returns {@code true} when any of the column's identifiers equal the configured {@code rootGuidRef}.
+     */
+    private boolean isRootGuidRefColumn(
+            final TableDefinition tableDef,
+            final TableMappingConfiguration.ColumnDefinition columnDef) {
+
+        if (tableDef.getRootGuidRef() == null) {
+            return false;
+        }
+        if (columnDef == null || columnDef.getIdentifiers() == null) {
+            return false;
+        }
+        return columnDef.getIdentifiers().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .anyMatch(id -> id.equalsIgnoreCase(tableDef.getRootGuidRef()));
+    }
+
+    private boolean isGuidIdentifierColumn(
+            final TableDefinition tableDef,
+            final TableMappingConfiguration.ColumnDefinition columnDef,
+            final String currentTableGuid) {
+
+        if (currentTableGuid == null || tableDef.getGuidColumn() == null || columnDef == null || columnDef.getIdentifiers() == null) {
+            return false;
+        }
+
+        return columnDef.getIdentifiers().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .anyMatch(identifier -> identifier.equalsIgnoreCase(tableDef.getGuidColumn()));
+    }
+
+    private String prepareGuidForTable(
+            final String tableName,
+            final TableDefinition tableDef,
+            final Map<String, String> guidContext) {
+
+        if (tableDef.getGuidColumn() == null) {
+            return null;
+        }
+
+        return guidContext.computeIfAbsent(tableName, ignored -> UUID.randomUUID().toString());
+    }
+
+    private void discardPreparedGuidIfUnused(
+            final String tableName,
+            final String preparedGuid,
+            final Map<String, String> guidContext) {
+
+        if (preparedGuid == null) {
+            return;
+        }
+
+        final String current = guidContext.get(tableName);
+        if (preparedGuid.equals(current)) {
+            guidContext.remove(tableName);
+        }
     }
 
     /**
@@ -215,11 +327,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             return rowData;
         }
 
-        final String guid = UUID.randomUUID().toString();
+        final String guid = guidContext.computeIfAbsent(tableName, ignored -> UUID.randomUUID().toString());
         final Map<String, String> ordered = new LinkedHashMap<>();
         ordered.put(tableDef.getGuidColumn(), guid);
         ordered.putAll(rowData);
-        guidContext.put(tableName, guid);
 
         log.debug("Generated GUID {} for table '{}'", guid, tableName);
         return ordered;
@@ -248,8 +359,14 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private Set<String> buildFkColumnSet(final TableDefinition tableDef) {
         final Set<String> fkColumns = new HashSet<>();
-        if (tableDef.getParentGuidRef() != null) fkColumns.add(tableDef.getParentGuidRef());
-        if (tableDef.getRootGuidRef()   != null) fkColumns.add(tableDef.getRootGuidRef());
+        if (tableDef.getColumns() == null) {
+            return fkColumns;
+        }
+        tableDef.getColumns().forEach((columnName, columnDef) -> {
+            if (isParentGuidRefColumn(tableDef, columnDef) || isRootGuidRefColumn(tableDef, columnDef)) {
+                fkColumns.add(columnName);
+            }
+        });
         return fkColumns;
     }
 
@@ -298,4 +415,3 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         return mappings;
     }
 }
-

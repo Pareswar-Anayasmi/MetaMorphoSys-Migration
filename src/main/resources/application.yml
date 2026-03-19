@@ -1,192 +1,278 @@
 table-mapping:
   tables:
 
-    # ─────────────────────────────────────────────
-    # PRIMARY CLIENT
-    # A new GUID is generated for every CSV row.
-    # ─────────────────────────────────────────────
-    client:
+    # =========================================================
+    # ROOT → CLAIM HISTORY
+    # =========================================================
+    CLAIM_HISTORY:
 
-      guidColumn: client_guid          # column name that will hold the generated GUID
-
-      skipIfEmpty: true
+      tableName: CLAIM_HISTORY
+      guidColumn: id
+      skipIfEmpty: false
 
       columns:
 
-        clientId:
+        claimNum:
           identifiers:
-            - emp_id
-            - employeeId
+            - TPCR_ID
+
+        eventTypeCd:
+          identifiers:
+            - TPCR_ID
+
+        eventSubTypeCd:
+          identifiers:
+            - TPCR_STATUS
+
+        claimTypeCd:
+          identifiers:
+            - TPCR_CASE_TYPE
+
+        clmAge:
+          identifiers:
+            - TPCR_DECEASED_AGE
+
+        statusCd:
+          identifiers:
+            - TPCR_STATUS
+
+        byPassSysConsideredFl:
+          identifiers:
+            - TPCR_BYPASS_SYS_CONSIDERED_FL
+
+        claimCurrencyCd:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        approvedAmtPolCurrency:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        approvedAmtClmCurrency:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        totSpecialBonusAmt:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        totLifeTimeAmt:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        totDeductibleAmt:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        totReductionAmt:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        totDeductedAmt:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        totDedCreditAdjAmt:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        totRoomAdjAmt:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        totCoInsuranceAmt:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        totAmtPaidByExternal:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        totAmtPaidByExternalIFPHosp:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        vhisStandardFl:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        errorFl:
+          identifiers:
+            - TPCR_INSURERCODE
+
+        claimGuid:
+          identifiers:
             - id
-            - clientId
 
-        name:
+        migratedSourceCd:
           identifiers:
-            - emp_name
-            - employeeName
-            - name
+            - TPCR_INSURERCODE
 
-        age:
-          identifiers:
-            - age
-            - employeeAge
 
-        department:
+        versionId:
           identifiers:
-            - dept
-            - department
+            - TPCR_INSURERCODE
 
-        email:
+        guid:
           identifiers:
-            - email
-            - emailAddress
+            - id
+
+        createdDt:
+          identifiers:
+            - TPCR_CREATED_DT
+
+        updatedDt:
+          identifiers:
+            - TPCR_UPDATED_DT
+
+        createdUser:
+          identifiers:
+            - TPCR_CREATED_BY
+
+        updatedUser:
+          identifiers:
+            - TPCR_UPDATED_BY
+
+        baseCompanyCd:
+          identifiers:
+            - TPCR_UPDATED_BY
+
+        baseCountryCd:
+          identifiers:
+            - TPCR_UPDATED_BY
+
+        versionNum:
+          identifiers:
+            - TPCR_UPDATED_BY
+
+        workflowStatusCd:
+          identifiers:
+            - TPCR_UPDATED_BY
+
+        shareByRegionalOfc:
+          identifiers:
+            - TPCR_UPDATED_BY
+
 
       children:
-        - address
+        - CLAIM_HISTORY_POLICY
 
+    # =========================================================
+    # CLAIM CLIENT (CLAIMANT / NOMINEE)
+    # =========================================================
+    CLAIM_HISTORY_CLIENT:
 
-    # ─────────────────────────────────────────────
-    # ADDRESS
-    # Holds client_guid as foreign key (set by code).
-    # ─────────────────────────────────────────────
-    address:
+      tableName: CLAIM_HISTORY_CLIENT
 
-      guidColumn: address_guid         # GUID generated for this address row
-
-      parent: client
-      parentGuidRef: client_guid       # FK column injected from parent GUID
-
-      skipIfEmpty: true
-
-      columns:
-
-        address:
-          identifiers:
-            - address
-            - street
-
-        city:
-          identifiers:
-            - city
-            - town
-
-        state:
-          identifiers:
-            - state
-            - province
-
-        country:
-          identifiers:
-            - country
-            - nation
-
-      children:
-        - contact
-
-
-    # ─────────────────────────────────────────────
-    # CONTACT
-    # Holds address_guid as foreign key (set by code).
-    # ─────────────────────────────────────────────
-    contact:
-
-      guidColumn: contact_guid
-      parent: address
-      parentGuidRef: address_guid      # FK column injected from parent GUID
+      parent: CLAIM_HISTORY
+      parentGuidRef: claim_history_ref_guid
+      guidColumn: id
 
       skipIfEmpty: true
 
       columns:
 
-        phone:
+        roleCd:
           identifiers:
-            - phone
-            - mobile
-            - contactNumber
+            - TPCR_REL_TYPE
 
-        contactType:
+        clientCd:
           identifiers:
-            - contactType
-            - type
+            - TPCR_CUST_ID
 
-        extension:
+        clientRefGuid:
           identifiers:
-            - extension
-            - ext
+            - id
 
-        availability:
+        claim_history_ref_guid:
           identifiers:
-            - availability
-            - time
+            - claim_history_ref_guid
 
+    CLAIM_HISTORY_POLICY:
 
-    # ─────────────────────────────────────────────
-    # NOMINEE CLIENT
-    # Nominee columns are prefixed with "nominee_" in CSV.
-    # Inserts another row into the client sheet.
-    # ─────────────────────────────────────────────
-    nomineeClient:
+      tableName: CLAIM_HISTORY_POLICY
+      parent: CLAIM_HISTORY
+      parentGuidRef: claim_history_ref_guid
+      guidColumn: id
+      skipIfEmpty: true
+      columns:
 
-      tableName: client                # write nominee rows into client output table
-      guidColumn: client_guid          # nominee client also gets a client_guid
+        policyNum:
+          identifiers:
+            - TPCR_POLICY_NO
 
-      sourcePrefix: nominee_           # all CSV columns for this table are prefixed
+        productCd:
+          identifiers:
+            - TPCR_PROCESS
+
+        policyCurrencyCd:
+          identifiers:
+            -
+
+        productCdVersion:
+          identifiers:
+            -
+
+        externalProductCd:
+          identifiers:
+            -
+
+        externalProductVersion:
+          identifiers:
+            -
+
+        regulatorProductCd:
+          identifiers:
+            - TPCR_POLICY_NO
+
+        regulatorProductVersion:
+          identifiers:
+            - T
+
+        planCd:
+          identifiers:
+            -
+
+        planCdVersion:
+          identifiers:
+            - claim_guid
+
+        genericGroupCd:
+          identifiers:
+            -
+
+        planOptionCd:
+          identifiers:
+            -
+
+        commencementDt:
+          identifiers:
+            -
+
+        claim_history_ref_guid:
+          identifiers:
+            - claim_history_ref_guid
+
+    CLIENT:
+
+      tableName: CLIENT
+
+      guidColumn: id
 
       skipIfEmpty: true
 
       columns:
-        clientId:
+
+        externalClientNum:
           identifiers:
-            - nominee_emp_id
+            - TPCR_POLICY_NO
 
-        name:
+        clientTypeCd:
           identifiers:
-            - nominee_name
+            - TPCR_REL_TYPE
 
-        age:
+        clientNum:
           identifiers:
-            - nominee_age
+            - TPCR_ID
 
-        email:
-          identifiers:
-            - nominee_email
-
-        relationship:
-          identifiers:
-            - nominee_relationship
-            - relationship
-
-      children:
-        - benefit
-
-
-    # ─────────────────────────────────────────────
-    # BENEFIT
-    # Links primary client GUID ↔ nominee client GUID.
-    # ─────────────────────────────────────────────
-    benefit:
-
-      parent: nomineeClient
-      parentGuidRef: nominee_client_guid   # FK from nominee
-
-      rootGuidRef: client_guid             # FK from root (primary) client
-
-      skipIfEmpty: true
-
-      columns:
-
-        benefitType:
-          identifiers:
-            - benefit_type
-            - benefitType
-
-        benefitAmount:
-          identifiers:
-            - benefit_amount
-            - benefitAmount
-
-        benefitPercentage:
-          identifiers:
-            - benefit_percentage
-            - benefitPercentage
-
+      children: []

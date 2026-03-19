@@ -36,6 +36,12 @@ public class TableMappingConfiguration {
         private String rootGuidRef;
 
         /**
+         * Logical key name of the root table whose GUID is referenced by {@code rootGuidRef}.
+         * Defaults to "client" when not specified.
+         */
+        private String rootTable;
+
+        /**
          * CSV column prefix used to identify columns that belong to this table.
          * E.g. "nominee_" means only CSV headers starting with "nominee_" are read.
          */
