@@ -196,40 +196,67 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             return;
         }
 
-        tableDef.getColumns().forEach((columnName, columnDef) -> {
+        tableDef.getColumns().forEach((columnName, columnDef) ->
+                rowData.put(
+                        columnName,
+                        resolveColumnValue(csvRecord, tableDef, headerMap, currentTableGuid, guidContext, columnName, columnDef)));
+    }
 
-            // 1. FK column whose identifier matches parentGuidRef → pull parent's GUID from context
-            if (isParentGuidRefColumn(tableDef, columnDef)) {
-                final String parentGuid = guidContext.get(tableDef.getParent());
-                rowData.put(columnName, parentGuid != null ? parentGuid : "");
-                return;
-            }
+    private String resolveColumnValue(
+            final CSVRecord csvRecord,
+            final TableDefinition tableDef,
+            final Map<String, String> headerMap,
+            final String currentTableGuid,
+            final Map<String, String> guidContext,
+            final String columnName,
+            final TableMappingConfiguration.ColumnDefinition columnDef) {
 
-            // 2. FK column whose identifier matches rootGuidRef → pull root table's GUID from context
-            if (isRootGuidRefColumn(tableDef, columnDef)) {
-                final String rootTable = tableDef.getRootTable() != null ? tableDef.getRootTable() : "client";
-                final String rootGuid = guidContext.get(rootTable);
-                rowData.put(columnName, rootGuid != null ? rootGuid : "");
-                return;
-            }
+        final String guidMappedValue = resolveGuidMappedValue(tableDef, currentTableGuid, guidContext, columnDef);
+        if (guidMappedValue != null) {
+            return guidMappedValue;
+        }
 
-            // 3. Column whose identifier matches the table's own guidColumn → use generated GUID
-            if (isGuidIdentifierColumn(tableDef, columnDef, currentTableGuid)) {
-                rowData.put(columnName, currentTableGuid != null ? currentTableGuid : "");
-                return;
-            }
+        return resolveCsvMappedValue(csvRecord, headerMap, columnName);
+    }
 
-            // 4. Normal CSV-mapped column
-            final String header = headerMap != null ? headerMap.get(columnName) : null;
-            if (header != null) {
-                final String value = csvRecord.get(header);
-                rowData.put(columnName, value == null ? "" : value.trim());
-                return;
-            }
+    private String resolveGuidMappedValue(
+            final TableDefinition tableDef,
+            final String currentTableGuid,
+            final Map<String, String> guidContext,
+            final TableMappingConfiguration.ColumnDefinition columnDef) {
 
-            // 5. No mapping found – write empty value
-            rowData.put(columnName, "");
-        });
+        if (isParentGuidRefColumn(tableDef, columnDef)) {
+            return emptyIfNull(guidContext.get(tableDef.getParent()));
+        }
+
+        if (isRootGuidRefColumn(tableDef, columnDef)) {
+            final String rootTable = tableDef.getRootTable() != null ? tableDef.getRootTable() : "client";
+            return emptyIfNull(guidContext.get(rootTable));
+        }
+
+        if (isGuidIdentifierColumn(tableDef, columnDef, currentTableGuid)) {
+            return emptyIfNull(currentTableGuid);
+        }
+
+        return null;
+    }
+
+    private String resolveCsvMappedValue(
+            final CSVRecord csvRecord,
+            final Map<String, String> headerMap,
+            final String columnName) {
+
+        final String header = headerMap != null ? headerMap.get(columnName) : null;
+        if (header == null) {
+            return "";
+        }
+
+        final String value = csvRecord.get(header);
+        return value == null ? "" : value.trim();
+    }
+
+    private String emptyIfNull(final String value) {
+        return value == null ? "" : value;
     }
 
     /**
