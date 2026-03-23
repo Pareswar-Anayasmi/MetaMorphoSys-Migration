@@ -4,19 +4,21 @@ import com.metanorph.migration.config.TableMappingConfiguration;
 import com.metanorph.migration.config.TableMappingConfiguration.TableDefinition;
 import com.metanorph.migration.service.CsvProcessingService;
 import com.metanorph.migration.util.CsvReaderUtil;
+import com.metanorph.migration.util.ExcelInputToCsvUtil;
 import com.metanorph.migration.util.ExcelWriterUtil;
 import com.metanorph.migration.util.HeaderResolverUtil;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.springframework.stereotype.Service;
-
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.Reader;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
@@ -41,6 +43,33 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     // ── Entry point ───────────────────────────────────────────────────────────
 
     @Override
+    public Workbook processFile(final String fileName, final InputStream inputStream) {
+
+        if (fileName == null || fileName.isBlank()) {
+            throw new IllegalArgumentException("File name is required.");
+        }
+
+        try {
+            if (isExcelFile(fileName)) {
+                final String csvContent = ExcelInputToCsvUtil.convertFirstSheetToCsv(inputStream);
+                return processCsv(new StringReader(csvContent));
+            }
+
+            try (Reader reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8)) {
+                return processCsv(reader);
+            }
+        } catch (IOException ex) {
+            log.error("Failed to process input file: {}", fileName, ex);
+            throw new IllegalStateException("Input processing failed. Please verify the file format.", ex);
+        }
+    }
+
+    private boolean isExcelFile(final String fileName) {
+        final String lowerCaseFileName = fileName.toLowerCase(Locale.ROOT);
+        return lowerCaseFileName.endsWith(".xlsx") || lowerCaseFileName.endsWith(".xls");
+    }
+
+//    @Override
     public Workbook processCsv(final Reader reader) {
 
         log.info("Starting CSV processing");
@@ -66,10 +95,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      * Processes one CSV row across all configured tables.
      * A fresh {@code guidContext} is created per row so GUIDs never leak between rows.
      */
-    private void processSingleRecord(
-            final CSVRecord csvRecord,
-            final Map<String, List<Map<String, String>>> tableData,
-            final Map<String, Map<String, String>> headerMappings) {
+    private void processSingleRecord(final CSVRecord csvRecord, final Map<String, List<Map<String, String>>> tableData, final Map<String, Map<String, String>> headerMappings) {
 
         final Map<String, String> guidContext = new HashMap<>();
 
@@ -81,20 +107,16 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      * Builds, optionally assigns a GUID to, and stores one row for a single table.
      */
     private void processTable(
-            final String tableName,
-            final TableDefinition tableDef,
-            final CSVRecord csvRecord,
-            final Map<String, Map<String, String>> headerMappings,
-            final Map<String, List<Map<String, String>>> tableData,
-            final Map<String, String> guidContext) {
+            final String tableName, final TableDefinition tableDef,
+            final CSVRecord csvRecord, final Map<String, Map<String, String>> headerMappings,
+            final Map<String, List<Map<String, String>>> tableData, final Map<String, String> guidContext) {
 
         final String currentTableGuid = prepareGuidForTable(tableName, tableDef, guidContext);
         final Map<String, String> headerMap = headerMappings.get(tableName);
         Map<String, String> rowData = buildRowData(csvRecord, tableDef, headerMap, currentTableGuid, guidContext);
 
         if (rowData == null) {
-            log.debug("Row skipped for table '{}' - parent GUID missing", tableName);
-            return;
+            log.debug("Row skipped for table '{}' - parent GUID missing", tableName); return;
         }
 
         if (shouldSkipRow(rowData, tableDef)) {
@@ -116,11 +138,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      * Returns {@code null} when a required FK GUID is not yet available (parent was skipped).
      */
     private Map<String, String> buildRowData(
-            final CSVRecord csvRecord,
-            final TableDefinition tableDef,
-            final Map<String, String> headerMap,
-            final String currentTableGuid,
-            final Map<String, String> guidContext) {
+            final CSVRecord csvRecord, final TableDefinition tableDef,
+            final Map<String, String> headerMap, final String currentTableGuid, final Map<String, String> guidContext) {
 
         // Validate parent / root GUIDs exist before building the row
         if (!validateParentGuidPresent(tableDef, guidContext)) {
@@ -139,9 +158,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      * Validates the parent table's GUID exists in context (parent row was not skipped).
      * Does NOT write anything to rowData – placement is handled inside populateColumns via column definitions.
      */
-    private boolean validateParentGuidPresent(
-            final TableDefinition tableDef,
-            final Map<String, String> guidContext) {
+    private boolean validateParentGuidPresent(final TableDefinition tableDef, final Map<String, String> guidContext) {
 
         if (tableDef.getParent() == null || tableDef.getParentGuidRef() == null) {
             return true;
@@ -161,9 +178,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      * Validates the root table's GUID exists in context.
      * Does NOT write anything to rowData – placement is handled inside populateColumns via column definitions.
      */
-    private boolean validateRootGuidPresent(
-            final TableDefinition tableDef,
-            final Map<String, String> guidContext) {
+    private boolean validateRootGuidPresent(final TableDefinition tableDef, final Map<String, String> guidContext) {
 
         if (tableDef.getRootGuidRef() == null) {
             return true;
@@ -185,31 +200,24 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      * when a column's identifier matches those sentinel keys.
      */
     private void populateColumns(
-            final CSVRecord csvRecord,
-            final TableDefinition tableDef,
-            final Map<String, String> headerMap,
-            final String currentTableGuid,
-            final Map<String, String> rowData,
-            final Map<String, String> guidContext) {
+            final CSVRecord csvRecord, final TableDefinition tableDef,
+            final Map<String, String> headerMap, final String currentTableGuid,
+            final Map<String, String> rowData, final Map<String, String> guidContext) {
 
         if (tableDef.getColumns() == null) {
             return;
         }
 
         tableDef.getColumns().forEach((columnName, columnDef) ->
-                rowData.put(
-                        columnName,
+                rowData.put( columnName,
                         resolveColumnValue(csvRecord, tableDef, headerMap, currentTableGuid, guidContext, columnName, columnDef)));
     }
 
     private String resolveColumnValue(
-            final CSVRecord csvRecord,
-            final TableDefinition tableDef,
+            final CSVRecord csvRecord, final TableDefinition tableDef,
             final Map<String, String> headerMap,
-            final String currentTableGuid,
-            final Map<String, String> guidContext,
-            final String columnName,
-            final TableMappingConfiguration.ColumnDefinition columnDef) {
+            final String currentTableGuid, final Map<String, String> guidContext,
+            final String columnName, final TableMappingConfiguration.ColumnDefinition columnDef) {
 
         final String guidMappedValue = resolveGuidMappedValue(tableDef, currentTableGuid, guidContext, columnDef);
         if (guidMappedValue != null) {
@@ -220,10 +228,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String resolveGuidMappedValue(
-            final TableDefinition tableDef,
-            final String currentTableGuid,
-            final Map<String, String> guidContext,
-            final TableMappingConfiguration.ColumnDefinition columnDef) {
+            final TableDefinition tableDef, final String currentTableGuid,
+            final Map<String, String> guidContext, final TableMappingConfiguration.ColumnDefinition columnDef) {
 
         if (isParentGuidRefColumn(tableDef, columnDef)) {
             return emptyIfNull(guidContext.get(tableDef.getParent()));
@@ -242,9 +248,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String resolveCsvMappedValue(
-            final CSVRecord csvRecord,
-            final Map<String, String> headerMap,
-            final String columnName) {
+            final CSVRecord csvRecord, final Map<String, String> headerMap, final String columnName) {
 
         final String header = headerMap != null ? headerMap.get(columnName) : null;
         if (header == null) {
@@ -282,9 +286,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     /**
      * Returns {@code true} when any of the column's identifiers equal the configured {@code rootGuidRef}.
      */
-    private boolean isRootGuidRefColumn(
-            final TableDefinition tableDef,
-            final TableMappingConfiguration.ColumnDefinition columnDef) {
+    private boolean isRootGuidRefColumn(final TableDefinition tableDef, final TableMappingConfiguration.ColumnDefinition columnDef) {
 
         if (tableDef.getRootGuidRef() == null) {
             return false;
@@ -299,8 +301,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private boolean isGuidIdentifierColumn(
-            final TableDefinition tableDef,
-            final TableMappingConfiguration.ColumnDefinition columnDef,
+            final TableDefinition tableDef, final TableMappingConfiguration.ColumnDefinition columnDef,
             final String currentTableGuid) {
 
         if (currentTableGuid == null || tableDef.getGuidColumn() == null || columnDef == null || columnDef.getIdentifiers() == null) {
@@ -314,8 +315,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String prepareGuidForTable(
-            final String tableName,
-            final TableDefinition tableDef,
+            final String tableName, final TableDefinition tableDef,
             final Map<String, String> guidContext) {
 
         if (tableDef.getGuidColumn() == null) {
@@ -326,9 +326,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private void discardPreparedGuidIfUnused(
-            final String tableName,
-            final String preparedGuid,
-            final Map<String, String> guidContext) {
+            final String tableName, final String preparedGuid, final Map<String, String> guidContext) {
 
         if (preparedGuid == null) {
             return;
@@ -345,10 +343,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      * prepends it to the row map, and stores it in {@code guidContext}.
      */
     private Map<String, String> assignGuidIfRequired(
-            final String tableName,
-            final TableDefinition tableDef,
-            final Map<String, String> rowData,
-            final Map<String, String> guidContext) {
+            final String tableName, final TableDefinition tableDef,
+            final Map<String, String> rowData, final Map<String, String> guidContext) {
 
         if (tableDef.getGuidColumn() == null) {
             return rowData;
@@ -369,9 +365,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      * Returns {@code true} when {@code skipIfEmpty = true} is configured and
      * all non-FK column values are blank.
      */
-    private boolean shouldSkipRow(
-            final Map<String, String> rowData,
-            final TableDefinition tableDef) {
+    private boolean shouldSkipRow(final Map<String, String> rowData, final TableDefinition tableDef) {
 
         if (!Boolean.TRUE.equals(tableDef.getSkipIfEmpty())) {
             return false;
