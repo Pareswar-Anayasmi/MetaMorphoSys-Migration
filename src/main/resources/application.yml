@@ -163,11 +163,9 @@ table-mapping:
     CLAIM_HISTORY_CLIENT:
 
       tableName: CLAIM_HISTORY_CLIENT
-
       parent: CLAIM_HISTORY
       parentGuidRef: claim_history_ref_guid
       guidColumn: id
-
       skipIfEmpty: true
 
       columns:
