@@ -6,4 +6,6 @@ import java.io.InputStream;
 public interface CsvProcessingService {
 
     Workbook processFile(String fileName, InputStream inputStream);
+
+    Workbook processConfiguredTable();
 }

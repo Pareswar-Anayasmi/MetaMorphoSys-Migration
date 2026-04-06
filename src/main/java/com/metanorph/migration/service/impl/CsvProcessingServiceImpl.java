@@ -1,5 +1,6 @@
 package com.metanorph.migration.service.impl;
 
+import com.metanorph.migration.config.DbSourceProperties;
 import com.metanorph.migration.config.TableMappingConfiguration;
 import com.metanorph.migration.config.TableMappingConfiguration.TableDefinition;
 import com.metanorph.migration.service.CsvProcessingService;
@@ -9,7 +10,9 @@ import com.metanorph.migration.util.ExcelWriterUtil;
 import com.metanorph.migration.util.HeaderResolverUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.springframework.stereotype.Service;
@@ -18,8 +21,16 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
+import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * Processes a flat CSV file and produces a multi-sheet Excel workbook.
@@ -38,7 +49,12 @@ import java.util.*;
 @RequiredArgsConstructor
 public class CsvProcessingServiceImpl implements CsvProcessingService {
 
+    private static final Pattern SAFE_SQL_IDENTIFIER = Pattern.compile("^[A-Za-z]\\w*$");
+    private static final String SQL_SERVER_ACCESS_DENIED_FRAGMENT = "Cannot open database";
+    private static final int SQL_SERVER_CANNOT_OPEN_DATABASE_ERROR = 4060;
+
     private final TableMappingConfiguration tableMappingConfiguration;
+    private final DbSourceProperties dbSourceProperties;
 
     // ── Entry point ───────────────────────────────────────────────────────────
 
@@ -61,6 +77,42 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         } catch (IOException ex) {
             log.error("Failed to process input file: {}", fileName, ex);
             throw new IllegalStateException("Input processing failed. Please verify the file format.", ex);
+        }
+    }
+
+    @Override
+    public Workbook processConfiguredTable() {
+
+        final String jdbcUrl = requireNonBlank(dbSourceProperties.getUrl(), "migration.db.url is required.");
+        final String sourceTable = validateSqlIdentifier(requireNonBlank(dbSourceProperties.getSourceTable(), "migration.db.source-table is required."));
+        final String sql = "SELECT * FROM " + sourceTable;
+
+        try {
+            loadDriverIfConfigured();
+            try (Connection connection = DriverManager.getConnection(
+                    jdbcUrl,
+                    emptyIfNull(dbSourceProperties.getUsername()),
+                    emptyIfNull(dbSourceProperties.getPassword()));
+                 PreparedStatement statement = connection.prepareStatement(sql)) {
+
+                statement.setQueryTimeout(safePositive(dbSourceProperties.getQueryTimeoutSeconds(), 60));
+                statement.setFetchSize(safePositive(dbSourceProperties.getFetchSize(), 500));
+
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    final String csvData = convertResultSetToCsv(resultSet);
+                    log.info("Database rows loaded from table '{}' and delegated to CSV pipeline", sourceTable);
+                    return processCsv(new StringReader(csvData));
+                }
+            }
+        } catch (SQLException ex) {
+            log.error("Database execution failed for table: {}", sourceTable, ex);
+
+            if (isSqlServerDatabaseAccessFailure(ex)) {
+                final String databaseName = resolveDatabaseNameFromUrl(jdbcUrl);
+                throw new IllegalStateException("Unable to connect to database '" + databaseName + "'. " + "Verify migration.db.url, migration.db.username, and migration.db.password "
+                        + "and ensure the login has access to that database.", ex);
+            }
+            throw new IllegalStateException("Database execution failed. Please verify migration.db configuration.", ex);
         }
     }
 
@@ -140,17 +192,14 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final CSVRecord csvRecord, final TableDefinition tableDef,
             final Map<String, String> headerMap, final String currentTableGuid, final Map<String, String> guidContext) {
 
-        // Validate parent / root GUIDs exist before building the row
-        if (!validateParentGuidPresent(tableDef, guidContext)) {
-            return null;
-        }
-        if (!validateRootGuidPresent(tableDef, guidContext)) {
-            return null;
+        if (validateParentGuidPresent(tableDef, guidContext)
+                && validateRootGuidPresent(tableDef, guidContext)) {
+            final Map<String, String> rowData = new LinkedHashMap<>();
+            populateColumns(csvRecord, tableDef, headerMap, currentTableGuid, rowData, guidContext);
+            return rowData;
         }
 
-        final Map<String, String> rowData = new LinkedHashMap<>();
-        populateColumns(csvRecord, tableDef, headerMap, currentTableGuid, rowData, guidContext);
-        return rowData;
+        return null;
     }
 
     /**
@@ -226,140 +275,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         return resolveCsvMappedValue(csvRecord, headerMap, columnName);
     }
 
-    private String resolveGuidMappedValue(
-            final TableDefinition tableDef, final String currentTableGuid,
-            final Map<String, String> guidContext, final TableMappingConfiguration.ColumnDefinition columnDef) {
-
-        if (isParentGuidRefColumn(tableDef, columnDef)) {
-            return emptyIfNull(guidContext.get(tableDef.getParent()));
-        }
-
-        if (isRootGuidRefColumn(tableDef, columnDef)) {
-            final String rootTable = tableDef.getRootTable() != null ? tableDef.getRootTable() : "client";
-            return emptyIfNull(guidContext.get(rootTable));
-        }
-
-        if (isGuidIdentifierColumn(tableDef, columnDef, currentTableGuid)) {
-            return emptyIfNull(currentTableGuid);
-        }
-
-        return null;
-    }
-
-    private String resolveCsvMappedValue(
-            final CSVRecord csvRecord, final Map<String, String> headerMap, final String columnName) {
-
-        final String header = headerMap != null ? headerMap.get(columnName) : null;
-        if (header == null) {
-            return "";
-        }
-
-        final String value = csvRecord.get(header);
-        return value == null ? "" : value.trim();
-    }
-
-    private String emptyIfNull(final String value) {
-        return value == null ? "" : value;
-    }
-
-    /**
-     * Returns {@code true} when ALL of the column's identifiers equal the configured {@code parentGuidRef}.
-     * Specifically: any identifier that exactly matches tableDef.getParentGuidRef().
-     */
-    private boolean isParentGuidRefColumn(
-            final TableDefinition tableDef,
-            final TableMappingConfiguration.ColumnDefinition columnDef) {
-
-        if (tableDef.getParent() == null || tableDef.getParentGuidRef() == null) {
-            return false;
-        }
-        if (columnDef == null || columnDef.getIdentifiers() == null) {
-            return false;
-        }
-        return columnDef.getIdentifiers().stream()
-                .filter(Objects::nonNull)
-                .map(String::trim)
-                .anyMatch(id -> id.equalsIgnoreCase(tableDef.getParentGuidRef()));
-    }
-
-    /**
-     * Returns {@code true} when any of the column's identifiers equal the configured {@code rootGuidRef}.
-     */
-    private boolean isRootGuidRefColumn(final TableDefinition tableDef, final TableMappingConfiguration.ColumnDefinition columnDef) {
-
-        if (tableDef.getRootGuidRef() == null) {
-            return false;
-        }
-        if (columnDef == null || columnDef.getIdentifiers() == null) {
-            return false;
-        }
-        return columnDef.getIdentifiers().stream()
-                .filter(Objects::nonNull)
-                .map(String::trim)
-                .anyMatch(id -> id.equalsIgnoreCase(tableDef.getRootGuidRef()));
-    }
-
-    private boolean isGuidIdentifierColumn(
-            final TableDefinition tableDef, final TableMappingConfiguration.ColumnDefinition columnDef,
-            final String currentTableGuid) {
-
-        if (currentTableGuid == null || tableDef.getGuidColumn() == null || columnDef == null || columnDef.getIdentifiers() == null) {
-            return false;
-        }
-
-        return columnDef.getIdentifiers().stream()
-                .filter(Objects::nonNull)
-                .map(String::trim)
-                .anyMatch(identifier -> identifier.equalsIgnoreCase(tableDef.getGuidColumn()));
-    }
-
-    private String prepareGuidForTable(
-            final String tableName, final TableDefinition tableDef,
-            final Map<String, String> guidContext) {
-
-        if (tableDef.getGuidColumn() == null) {
-            return null;
-        }
-
-        return guidContext.computeIfAbsent(tableName, ignored -> UUID.randomUUID().toString());
-    }
-
-    private void discardPreparedGuidIfUnused(
-            final String tableName, final String preparedGuid, final Map<String, String> guidContext) {
-
-        if (preparedGuid == null) {
-            return;
-        }
-
-        final String current = guidContext.get(tableName);
-        if (preparedGuid.equals(current)) {
-            guidContext.remove(tableName);
-        }
-    }
-
-    /**
-     * Generates a UUID for tables that declare a {@code guidColumn},
-     * prepends it to the row map, and stores it in {@code guidContext}.
-     */
-    private Map<String, String> assignGuidIfRequired(
-            final String tableName, final TableDefinition tableDef,
-            final Map<String, String> rowData, final Map<String, String> guidContext) {
-
-        if (tableDef.getGuidColumn() == null) {
-            return rowData;
-        }
-
-        final String guid = guidContext.computeIfAbsent(tableName, ignored -> UUID.randomUUID().toString());
-        final Map<String, String> ordered = new LinkedHashMap<>();
-        ordered.put(tableDef.getGuidColumn(), guid);
-        ordered.putAll(rowData);
-
-        log.debug("Generated GUID {} for table '{}'", guid, tableName);
-        return ordered;
-    }
-
     // ── Skip-row evaluation ───────────────────────────────────────────────────
-
     /**
      * Returns {@code true} when {@code skipIfEmpty = true} is configured and
      * all non-FK column values are blank.
@@ -426,12 +342,240 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private Map<String, Map<String, String>> resolveHeaderMappings(final CSVParser csvParser) {
 
+        return resolveHeaderMappings(csvParser.getHeaderMap().keySet());
+    }
+
+    private Map<String, Map<String, String>> resolveHeaderMappings(final Set<String> sourceHeaders) {
+
         final Map<String, Map<String, String>> mappings = new HashMap<>();
-        final Set<String> csvHeaders = csvParser.getHeaderMap().keySet();
-
-        tableMappingConfiguration.getTables().forEach((tableName, def) ->
-                mappings.put(tableName, HeaderResolverUtil.resolve(csvHeaders, def)));
-
+        tableMappingConfiguration.getTables().forEach((tableName, def) -> mappings.put(tableName, HeaderResolverUtil.resolve(sourceHeaders, def)));
         return mappings;
+    }
+
+    public String convertResultSetToCsv(final ResultSet resultSet) throws SQLException {
+
+        final ResultSetMetaData metaData = resultSet.getMetaData();
+        final int columnCount = metaData.getColumnCount();
+
+        try (StringWriter writer = new StringWriter(); CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT)) {
+            final List<String> headers = new ArrayList<>(columnCount);
+            for (int i = 1; i <= columnCount; i++) {
+                headers.add(resolveColumnLabel(metaData, i));
+            }
+            csvPrinter.printRecord(headers);
+
+            int rowCount = 0;
+            while (resultSet.next()) {
+                rowCount++;
+                final List<String> row = new ArrayList<>(columnCount);
+                for (int i = 1; i <= columnCount; i++) {
+                    row.add(safeReadAsString(resultSet, i));
+                }
+                csvPrinter.printRecord(row);
+            }
+            csvPrinter.flush();
+            log.info("Database rows serialized to CSV: {}", rowCount);
+            return writer.toString();
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to serialize database result to CSV.", ex);
+        }
+    }
+
+    private String resolveColumnLabel(final ResultSetMetaData metaData, final int columnIndex) throws SQLException {
+
+        final String label = metaData.getColumnLabel(columnIndex);
+        if (label != null && !label.isBlank()) {
+            return label.trim();
+        }
+
+        final String fallback = metaData.getColumnName(columnIndex);
+        return fallback == null ? "" : fallback.trim();
+    }
+
+    private String safeReadAsString(final ResultSet resultSet, final int columnIndex) throws SQLException {
+
+        final Object value = resultSet.getObject(columnIndex);
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private void loadDriverIfConfigured() {
+
+        final String driverClassName = dbSourceProperties.getDriverClassName();
+        if (driverClassName == null || driverClassName.isBlank()) {
+            return;
+        }
+
+        try {
+            Class.forName(driverClassName.trim());
+        } catch (ClassNotFoundException ex) {
+            throw new IllegalStateException("Configured JDBC driver class was not found: " + driverClassName, ex);
+        }
+    }
+
+    private String validateSqlIdentifier(final String identifier) {
+
+        final String trimmed = identifier == null ? "" : identifier.trim();
+        if (!SAFE_SQL_IDENTIFIER.matcher(trimmed).matches()) {
+            throw new IllegalArgumentException("Invalid SQL identifier configured for migration.db.source-table.");
+        }
+        return trimmed;
+    }
+
+    private int safePositive(final Integer value, final int defaultValue) {
+        if (value == null || value <= 0) {
+            return defaultValue;
+        }
+        return value;
+    }
+
+    private String requireNonBlank(final String value, final String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
+    }
+
+    private boolean isSqlServerDatabaseAccessFailure(final SQLException ex) {
+        if (ex.getErrorCode() == SQL_SERVER_CANNOT_OPEN_DATABASE_ERROR) {
+            return true;
+        }
+        final String message = ex.getMessage();
+        return message != null && message.contains(SQL_SERVER_ACCESS_DENIED_FRAGMENT);
+    }
+
+    private String resolveDatabaseNameFromUrl(final String jdbcUrl) {
+        final String marker = "databaseName=";
+        final int markerStart = jdbcUrl.indexOf(marker);
+        if (markerStart < 0) {
+            return "<unknown>";
+        }
+        final int valueStart = markerStart + marker.length();
+        final int valueEnd = jdbcUrl.indexOf(';', valueStart);
+        if (valueEnd < 0) {
+            return jdbcUrl.substring(valueStart).trim();
+        }
+        return jdbcUrl.substring(valueStart, valueEnd).trim();
+    }
+
+
+    private String resolveGuidMappedValue(
+            final TableDefinition tableDef, final String currentTableGuid,
+            final Map<String, String> guidContext, final TableMappingConfiguration.ColumnDefinition columnDef) {
+
+        if (isParentGuidRefColumn(tableDef, columnDef)) {
+            return emptyIfNull(guidContext.get(tableDef.getParent()));
+        }
+
+        if (isRootGuidRefColumn(tableDef, columnDef)) {
+            final String rootTable = tableDef.getRootTable() != null ? tableDef.getRootTable() : "client";
+            return emptyIfNull(guidContext.get(rootTable));
+        }
+
+        if (isGuidIdentifierColumn(tableDef, columnDef, currentTableGuid)) {
+            return emptyIfNull(currentTableGuid);
+        }
+
+        return null;
+    }
+
+    private String resolveCsvMappedValue(
+            final CSVRecord csvRecord, final Map<String, String> headerMap, final String columnName) {
+
+        final String header = headerMap != null ? headerMap.get(columnName) : null;
+        if (header == null) {
+            return "";
+        }
+
+        final String value = csvRecord.get(header);
+        return value == null ? "" : value.trim();
+    }
+
+    private String emptyIfNull(final String value) {
+        return value == null ? "" : value;
+    }
+
+    private boolean isParentGuidRefColumn(
+            final TableDefinition tableDef,
+            final TableMappingConfiguration.ColumnDefinition columnDef) {
+
+        if (tableDef.getParent() == null || tableDef.getParentGuidRef() == null) {
+            return false;
+        }
+        if (columnDef == null || columnDef.getIdentifiers() == null) {
+            return false;
+        }
+        return columnDef.getIdentifiers().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .anyMatch(id -> id.equalsIgnoreCase(tableDef.getParentGuidRef()));
+    }
+
+    private boolean isRootGuidRefColumn(final TableDefinition tableDef, final TableMappingConfiguration.ColumnDefinition columnDef) {
+
+        if (tableDef.getRootGuidRef() == null) {
+            return false;
+        }
+        if (columnDef == null || columnDef.getIdentifiers() == null) {
+            return false;
+        }
+        return columnDef.getIdentifiers().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .anyMatch(id -> id.equalsIgnoreCase(tableDef.getRootGuidRef()));
+    }
+
+    private boolean isGuidIdentifierColumn(
+            final TableDefinition tableDef, final TableMappingConfiguration.ColumnDefinition columnDef,
+            final String currentTableGuid) {
+
+        if (currentTableGuid == null || tableDef.getGuidColumn() == null || columnDef == null || columnDef.getIdentifiers() == null) {
+            return false;
+        }
+
+        return columnDef.getIdentifiers().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .anyMatch(identifier -> identifier.equalsIgnoreCase(tableDef.getGuidColumn()));
+    }
+
+    private String prepareGuidForTable(
+            final String tableName, final TableDefinition tableDef,
+            final Map<String, String> guidContext) {
+
+        if (tableDef.getGuidColumn() == null) {
+            return null;
+        }
+
+        return guidContext.computeIfAbsent(tableName, ignored -> UUID.randomUUID().toString());
+    }
+
+    private void discardPreparedGuidIfUnused(
+            final String tableName, final String preparedGuid, final Map<String, String> guidContext) {
+
+        if (preparedGuid == null) {
+            return;
+        }
+
+        final String current = guidContext.get(tableName);
+        if (preparedGuid.equals(current)) {
+            guidContext.remove(tableName);
+        }
+    }
+
+    private Map<String, String> assignGuidIfRequired(
+            final String tableName, final TableDefinition tableDef,
+            final Map<String, String> rowData, final Map<String, String> guidContext) {
+
+        if (tableDef.getGuidColumn() == null) {
+            return rowData;
+        }
+
+        final String guid = guidContext.computeIfAbsent(tableName, ignored -> UUID.randomUUID().toString());
+        final Map<String, String> ordered = new LinkedHashMap<>();
+        ordered.put(tableDef.getGuidColumn(), guid);
+        ordered.putAll(rowData);
+
+        log.debug("Generated GUID {} for table '{}'", guid, tableName);
+        return ordered;
     }
 }

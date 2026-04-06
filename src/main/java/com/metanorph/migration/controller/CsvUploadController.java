@@ -42,19 +42,33 @@ public class CsvUploadController {
      * @throws IOException if reading the upload or writing the workbook fails
      */
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<InputStreamResource> uploadCsv(
-            @RequestParam("file") final MultipartFile file) throws IOException {
+    public ResponseEntity<InputStreamResource> uploadCsv(@RequestParam("file") final MultipartFile file) throws IOException {
 
         log.info("Upload request received. File name: {}", file.getOriginalFilename());
 
         final byte[] excelBytes = buildExcelBytes(file);
 
-        log.info("Excel file generated successfully");
+        log.info("Excel file generated successfully from uploaded file");
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=migration_output.xlsx")
-                .contentType(EXCEL_MEDIA_TYPE)
-                .body(new InputStreamResource(new ByteArrayInputStream(excelBytes)));
+        return buildExcelResponse(excelBytes);
+    }
+
+    /**
+     * Executes migration using configured DB source table and returns generated Excel workbook.
+     */
+    @PostMapping("/execute")
+    public ResponseEntity<InputStreamResource> executeFromTable() throws IOException {
+
+        log.info("Execute request received. Source: configured database table");
+
+        try (Workbook workbook = csvProcessingService.processConfiguredTable();
+             ByteArrayOutputStream buffer = new ByteArrayOutputStream()) {
+
+            workbook.write(buffer);
+            final byte[] excelBytes = buffer.toByteArray();
+            log.info("Excel file generated successfully from configured table source");
+            return buildExcelResponse(excelBytes);
+        }
     }
 
     /**
@@ -69,5 +83,12 @@ public class CsvUploadController {
             workbook.write(buffer);
             return buffer.toByteArray();
         }
+    }
+
+    private ResponseEntity<InputStreamResource> buildExcelResponse(final byte[] excelBytes) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=migration_output.xlsx")
+                .contentType(EXCEL_MEDIA_TYPE)
+                .body(new InputStreamResource(new ByteArrayInputStream(excelBytes)));
     }
 }
