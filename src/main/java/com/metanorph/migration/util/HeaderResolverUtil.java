@@ -72,7 +72,17 @@ public final class HeaderResolverUtil {
             final Map<String, String> mapping,
             final Map<String, List<String>> headerToColumns) {
 
-        if (columnDefinition == null || columnDefinition.getIdentifiers() == null || columnDefinition.getIdentifiers().isEmpty()) {
+        if (columnDefinition == null) {
+            log.debug("No configuration found for logical column '{}'.", columnName);
+            return;
+        }
+
+        if (columnDefinition.getLiteral() != null && !columnDefinition.getLiteral().isBlank()) {
+            log.debug("Logical column '{}' is configured with a literal value.", columnName);
+            return;
+        }
+
+        if (columnDefinition.getIdentifiers() == null || columnDefinition.getIdentifiers().isEmpty()) {
             log.debug("No identifiers configured for logical column '{}'.", columnName);
             return;
         }

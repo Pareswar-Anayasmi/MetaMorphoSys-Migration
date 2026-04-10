@@ -15,7 +15,9 @@ public final class ExcelWriterUtil {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    public static Workbook write(Map<String, List<Map<String, String>>> tableData) {
+    public static Workbook write(
+            final Map<String, List<Map<String, String>>> tableData,
+            final Map<String, List<String>> configuredHeadersBySheet) {
 
         Workbook workbook = new XSSFWorkbook();
 
@@ -23,11 +25,11 @@ public final class ExcelWriterUtil {
 
             Sheet sheet = workbook.createSheet(sheetName);
 
-            if (rows.isEmpty()) {
+            List<String> headers = resolveHeaders(rows, configuredHeadersBySheet.get(sheetName));
+
+            if (headers.isEmpty()) {
                 return;
             }
-
-            List<String> headers = resolveHeaders(rows);
 
             Row headerRow = sheet.createRow(0);
             for (int columnIndex = 0; columnIndex < headers.size(); columnIndex++) {
@@ -49,8 +51,20 @@ public final class ExcelWriterUtil {
         return workbook;
     }
 
-    private static List<String> resolveHeaders(List<Map<String, String>> rows) {
+    private static List<String> resolveHeaders(
+            final List<Map<String, String>> rows,
+            final List<String> configuredHeaders) {
+
         Map<String, Boolean> seen = new LinkedHashMap<>();
+
+        if (configuredHeaders != null) {
+            for (String configuredHeader : configuredHeaders) {
+                if (configuredHeader == null || configuredHeader.isBlank()) {
+                    continue;
+                }
+                seen.putIfAbsent(configuredHeader, Boolean.TRUE);
+            }
+        }
 
         for (Map<String, String> rowData : rows) {
             for (String key : rowData.keySet()) {

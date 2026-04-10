@@ -12,146 +12,74 @@ table-mapping:
 
       columns:
 
-        claimNum:
-          identifiers:
-            - TPCR_ID
-
-        eventTypeCd:
-          identifiers:
-            - TPCR_ID
-
-        eventSubTypeCd:
-          identifiers:
-            - TPCR_STATUS
-
-        claimTypeCd:
-          identifiers:
-            - TPCR_CASE_TYPE
-
-        clmAge:
-          identifiers:
-            - TPCR_DECEASED_AGE
-
-        statusCd:
-          identifiers:
-            - TPCR_STATUS
-
-        byPassSysConsideredFl:
-          identifiers:
-            - TPCR_BYPASS_SYS_CONSIDERED_FL
-
-        claimCurrencyCd:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        approvedAmtPolCurrency:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        approvedAmtClmCurrency:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        totSpecialBonusAmt:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        totLifeTimeAmt:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        totDeductibleAmt:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        totReductionAmt:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        totDeductedAmt:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        totDedCreditAdjAmt:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        totRoomAdjAmt:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        totCoInsuranceAmt:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        totAmtPaidByExternal:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        totAmtPaidByExternalIFPHosp:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        vhisStandardFl:
-          identifiers:
-            - TPCR_INSURERCODE
-
-        errorFl:
-          identifiers:
-            - TPCR_INSURERCODE
-
         claimGuid:
           identifiers:
             - id
 
-        migratedSourceCd:
+        claimNum:
           identifiers:
-            - TPCR_INSURERCODE
+            - TPCR_CLAIMID
 
-
-        versionId:
+        causeOfDeathCd:
           identifiers:
-            - TPCR_INSURERCODE
+            - TPCR_CAUSE_OF_DEATH
 
-        guid:
+        externalClmIntimationNum:
           identifiers:
-            - id
+            - TPCR_URN
 
-        createdDt:
+        eventDt:
           identifiers:
+            - TPCR_DOD
+
+        intimationDt:
+          identifiers:
+            - TPCR_DATEOFLODGINGCLAIM
             - TPCR_CREATED_DT
 
-        updatedDt:
+        eventTypeCd:
           identifiers:
-            - TPCR_UPDATED_DT
+            - DEATH
 
-        createdUser:
+        eventSubTypeCd:
           identifiers:
-            - TPCR_CREATED_BY
+            - TPCR_CAUSE_OF_DEATH
 
-        updatedUser:
+        accidentDt:
           identifiers:
-            - TPCR_UPDATED_BY
+            - TPCR_DAYOFACCIDENT
 
-        baseCompanyCd:
+        accidentDts:
           identifiers:
-            - TPCR_UPDATED_BY
+            - TPCR_PLACE_OF_ACCIDENT
 
-        baseCountryCd:
+        claimTypeCd:
           identifiers:
-            - TPCR_UPDATED_BY
+            - DEATH
 
-        versionNum:
+        adjReasonCd:
           identifiers:
-            - TPCR_UPDATED_BY
+            - TPCR_CPC_CLM_DEC
 
-        workflowStatusCd:
+        adjRemarks:
           identifiers:
-            - TPCR_UPDATED_BY
+            - TPCR_REMARKS
 
-        shareByRegionalOfc:
+        accidentTm:
           identifiers:
-            - TPCR_UPDATED_BY
+            - TPCR_TIMEOFACCIDENT
+
+        approvedAmtPolCurrency:
+          identifiers:
+            - TPCR_APPROVEDAMT
+
+        typeOfDeathCd:
+          identifiers:
+            - TPCR_NATURE_OF_ACCIDENT
+
+        statusCd:
+          identifiers:
+            - TPCR_CLAIM_DECSN
 
 
       children:
@@ -168,7 +96,20 @@ table-mapping:
       guidColumn: id
       skipIfEmpty: true
 
+      createAdditionalRow:
+        condition:
+          anyNotEmpty:
+            - roleCd
+
       columns:
+
+        clientRefGuid:
+          identifiers:
+            - id
+
+        masterPolicyNum:
+          identifiers:
+            - TPCR_POLICY_NO
 
         roleCd:
           identifiers:
@@ -178,9 +119,10 @@ table-mapping:
           identifiers:
             - TPCR_CUST_ID
 
-        clientRefGuid:
+        relatedToInsuredCd:
           identifiers:
-            - id
+            - TPCR_RELATION
+
 
         claim_history_ref_guid:
           identifiers:
@@ -199,53 +141,21 @@ table-mapping:
           identifiers:
             - TPCR_POLICY_NO
 
-        productCd:
-          identifiers:
-            - TPCR_PROCESS
-
-        policyCurrencyCd:
+        commencementDt:
           identifiers:
             -
-
-        productCdVersion:
-          identifiers:
-            -
-
-        externalProductCd:
-          identifiers:
-            -
-
-        externalProductVersion:
-          identifiers:
-            -
-
-        regulatorProductCd:
-          identifiers:
-            - TPCR_POLICY_NO
-
-        regulatorProductVersion:
-          identifiers:
-            - T
 
         planCd:
           identifiers:
             -
 
-        planCdVersion:
+        lastPremRecdDt:
           identifiers:
-            - claim_guid
+            - TPCR_PREMREMITDATE
 
-        genericGroupCd:
+        premiumDueDt:
           identifiers:
-            -
-
-        planOptionCd:
-          identifiers:
-            -
-
-        commencementDt:
-          identifiers:
-            -
+            - TPCR_PREMDEBITDATE
 
         claim_history_ref_guid:
           identifiers:
@@ -254,16 +164,19 @@ table-mapping:
     CLIENT:
 
       tableName: CLIENT
-
       guidColumn: id
-
       skipIfEmpty: true
+
+      createAdditionalRow:
+        condition:
+          anyNotEmpty:
+            - clientTypeCd
 
       columns:
 
         externalClientNum:
           identifiers:
-            - TPCR_POLICY_NO
+            - TPCR_CUST_ID
 
         clientTypeCd:
           identifiers:
@@ -271,6 +184,466 @@ table-mapping:
 
         clientNum:
           identifiers:
-            - TPCR_ID
+            - TPCR_CUST_ID
 
-      children: []
+    # =========================================================
+    # CLIENT ADDRESS (derived in service logic)
+    # =========================================================
+    CLIENT_ADDRESS:
+
+      tableName: CLIENT_ADDRESS
+      skipIfEmpty: true
+
+      # Declared for config consistency; values are filled in service logic.
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        clientAddressGuid:
+          identifiers:
+            - clientAddressGuid
+
+        clientGuid:
+          identifiers:
+            - clientGuid
+
+        typeCd:
+          identifiers:
+            - typeCd
+
+        addressLine1:
+          identifiers:
+            - TPCR_CLAIMANT_ADD
+            - TPCR_ADDRESSLINE1
+            - TPCR_NOMINEEADDRESSLINE1
+            - TPCR_ADDRESSOFGUARDIAN
+
+        addressLine2:
+          identifiers:
+            - TPCR_ADDRESSLINE2
+
+        cityCd:
+          identifiers:
+            - TPCR_CLM_NOM_CITY
+
+        stateCd:
+          identifiers:
+            - TPCR_CLM_NOM_STATE
+
+        postCode:
+          identifiers:
+            - TPCR_CLM_NOM_PINCODE
+
+        prefferedFl:
+          identifiers:
+            - TRUE
+
+        districtCd:
+          identifiers:
+            - TPCR_DISTRICT
+
+    # =========================================================
+    # CLIENT PHONE (derived in service logic)
+    # =========================================================
+    CLIENT_PHONE:
+
+      tableName: CLIENT_PHONE
+      skipIfEmpty: true
+
+      # Declared for config consistency; values are filled in service logic.
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        clientPhoneGuid:
+          identifiers:
+            - clientPhoneGuid
+
+        clientGuid:
+          identifiers:
+            - clientGuid
+
+        typeCd:
+          identifiers:
+            - typeCd
+
+        contactNum:
+          identifiers:
+            - TPCR_MOBILENUMBER
+            - TPCR_CLAIMANT_MOBNO
+            - TPCR_NOMINEEMOBILENUMBER
+            - TPCR_GUARDIANMOBILENUMBER
+
+        prefferedFl:
+          identifiers:
+            - TRUE
+
+    # =========================================================
+    # CLIENT EMAIL (derived in service logic)
+    # =========================================================
+    CLIENT_EMAIL:
+
+      tableName: CLIENT_EMAIL
+      skipIfEmpty: true
+
+      # Declared for config consistency; values are filled in service logic.
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        clientEmailGuid:
+          identifiers:
+            - clientEmailGuid
+
+        clientGuid:
+          identifiers:
+            - clientGuid
+
+        typeCd:
+          identifiers:
+            - typeCd
+
+        emailId:
+          identifiers:
+            - TPCR_EMAIL
+            - TPCR_EMAILID
+            - TPCR_CLAIMANTEMAILID
+            - TPCR_NOMINEEEMAILID
+            - TPCR_GUARDIANEMAILID
+
+        prefferedFl:
+          identifiers:
+            - TRUE
+
+    # =========================================================
+    # CLIENT RELATIONSHIP (derived in service logic)
+    # =========================================================
+    CLIENT_RELATIONSHIP:
+
+      tableName: CLIENT_RELATIONSHIP
+      skipIfEmpty: true
+
+      # Declared for config consistency; values are filled in service logic.
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        clientGuidTo:
+          identifiers:
+            - clientGuidTo
+
+        relationshipTypeCd:
+          identifiers:
+            - relationshipTypeCd
+
+        relationshipCd:
+          identifiers:
+            - TPCR_RELATION
+            - TPCR_RELATIONOFCLAIMANT
+            - TPCR_RELATIONSHIPOFGUARDIAN
+
+        clientNumTo:
+          identifiers:
+            - TPCR_CUST_ID
+
+        name:
+          identifiers:
+            - TPCR_BENEF_NAME
+
+        clientGuid:
+          identifiers:
+            - clientGuid
+
+        clientRelationshipGuid:
+          identifiers:
+            - clientRelationshipGuid
+
+    # =========================================================
+    # CLIENT ADDITIONAL FIELDS (derived in service logic)
+    # =========================================================
+    CLIENT_ADD_FLD:
+
+      tableName: CLIENT_ADD_FLD
+      skipIfEmpty: true
+
+      # Declared for config consistency; values are filled in service logic.
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        fromEffectiveDT:
+          identifiers:
+            -
+
+        lastEffectiveDt:
+          identifiers:
+            -
+
+        clientGuid:
+          identifiers:
+            - clientGuid
+
+        clientAddFldGuid:
+          identifiers:
+            - clientAddFldGuid
+
+        fieldKey:
+          identifiers:
+            - TPCR_INSURERCODE
+            - TPCR_BANKCODE
+            - TPCR_BRANCH_CODE
+            - TPCR_BANKBRANCHEMAILID
+            - TPCR_NOM_DOD
+            - TPCR_NOM_EXPIRED
+
+        fieldValue:
+          identifiers:
+            - TPCR_INSURERCODE
+            - TPCR_BANKCODE
+            - TPCR_BRANCH_CODE
+            - TPCR_BANKBRANCHEMAILID
+            - TPCR_NOM_DOD
+            - TPCR_NOM_EXPIRED
+
+    CLAIM_ADDITIONAL_FIELD:
+
+      tableName: CLAIM_ADDITIONAL_FIELD
+      skipIfEmpty: true
+
+      # Declared for config consistency; values are filled in service logic.
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        fromEffectiveDT:
+          identifiers:
+            -
+
+        lastEffectiveDt:
+          identifiers:
+            -
+
+        claimGuid:
+          identifiers:
+            - claimGuid
+
+        claimAddFldGuid:
+          identifiers:
+            - claimAddFldGuid
+
+        fieldKey:
+          identifiers:
+            - TPCR_INSURERCODE
+            - TPCR_BANKCODE
+            - TPCR_BRANCH_CODE
+            - TPCR_BANKBRANCHEMAILID
+            - TPCR_NOM_DOD
+            - TPCR_NOM_EXPIRED
+
+        fieldValue:
+          identifiers:
+            - TPCR_INSURERCODE
+            - TPCR_BANKCODE
+            - TPCR_BRANCH_CODE
+            - TPCR_BANKBRANCHEMAILID
+            - TPCR_NOM_DOD
+            - TPCR_NOM_EXPIRED
+
+    # =========================================================
+    # PERSON (derived in service logic)
+    # =========================================================
+    PERSON:
+
+      tableName: PERSON
+      skipIfEmpty: true
+
+      createAdditionalRow:
+        condition:
+          anyNotEmpty:
+            - roleCd
+
+      # Declared for config consistency; values are filled in service logic.
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        personGuid:
+          identifiers:
+            - personGuid
+
+        clientGuid:
+          identifiers:
+            - clientGuid
+
+        firstName:
+          identifiers:
+            - TPCR_NOMINEEFIRSTNAME
+            - TPCR_CLAIMANT_NAME
+            - TPCR_NAMEOFGUARDIAN
+
+        genderCd:
+          identifiers:
+            - TPCR_GENDER
+            - TPCR_CLAIMANTGENDER
+            - TPCR_NOMINEEGENDER
+
+        dateOfBirth:
+          identifiers:
+            - TPCR_DOB_DECEASED
+            - TPCR_CLAIMANT_DOB
+            - TPCR_NOM_DOB
+
+        age:
+          identifiers:
+            - TPCR_NOM_AGE
+
+        otherName:
+          identifiers:
+            - TPCR_CORRECTNOMINEEFIRSTNAME
+
+        insuredType:
+          identifiers:
+            -
+
+    # =========================================================
+    # PERSON IDENTITY (derived in service logic)
+    # =========================================================
+    PERSON_IDENTITY:
+
+      tableName: PERSON_IDENTITY
+      skipIfEmpty: true
+
+      # Declared for config consistency; values are filled in service logic.
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        personIdentityGuid:
+          identifiers:
+            - personIdentityGuid
+
+        personGuid:
+          identifiers:
+            - personGuid
+
+        identityTypeCd:
+          identifiers:
+            - identityTypeCd
+
+        identityNum:
+          identifiers:
+            - TPCR_KYCID1_NUMBER
+            - TPCR_KYCID2_NUMBER
+            - TPCR_KYCID1NUMBER
+            - TPCR_PANNUMBER
+            - TPCR_AADHAARNUMBER
+            - TPCR_CKYC_NUMBER
+
+    CLAIM_HISTORY_PAYMENT:
+
+      tableName: CLAIM_HISTORY_PAYMENT
+      skipIfEmpty: true
+
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        clientRefGuid:
+          identifiers:
+            - clientRefGuid
+
+        policyNum:
+          identifiers:
+            - TPCR_CUST_ID
+
+        accountNumber:
+          identifiers:
+            - TPCR_ACC_NO
+            - TPCR_BENEF_BNK_ACC_NO
+            - TPCR_CLAIMANTBANKACCOUNT
+
+        accountHolderName:
+          identifiers:
+            - TPCR_CLAIMANT_NAME
+
+        bankName:
+          identifiers:
+            - TPCR_BENEF_BNK_NAME
+            - TPCR_CLAIMANTBANK
+
+        branchName:
+          identifiers:
+            - TPCR_BENEF_BRNCH_NAME
+
+        branchIdNum1:
+          identifiers:
+            - TPCR_BENEF_IFSC
+            - TPCR_CLAIMANTBRANCHIFSC
+
+        paymentMethodCd:
+          identifiers:
+            - Single/Regular
+
+    CLAIM_HISTORY_COVERAGE:
+
+      tableName: CLAIM_HISTORY_COVERAGE
+      guidColumn: claimHistoryCoverageGuid
+      skipIfEmpty: false
+
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        claimHistoryCoverageGuid:
+          identifiers:
+            - claimHistoryCoverageGuid
+
+        planCd:
+          identifiers:
+            - TPCR_SCHEME
+
+    CLAIM_HISTORY_COV_BENEFIT:
+
+      tableName: CLAIM_HISTORY_COV_BENEFIT
+      parent: CLAIM_HISTORY_COVERAGE
+      parentGuidRef: claimHistoryCoverageGuid
+      guidColumn: guid
+      skipIfEmpty: false
+
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        claimHistoryCoverageGuid:
+          identifiers:
+            - claimHistoryCoverageGuid
+
+        benefitCd:
+          identifiers:
+            - TPCR_SCHEME
+
+        guid:
+          identifiers:
+            - guid

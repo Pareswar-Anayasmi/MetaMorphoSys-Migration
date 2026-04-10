@@ -1,5 +1,6 @@
 package com.metanorph.migration.controller;
 
+import com.metanorph.migration.contstants.ClientConstants;
 import com.metanorph.migration.service.CsvProcessingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,8 +30,6 @@ import java.io.IOException;
 @CrossOrigin("*")
 public class CsvUploadController {
 
-    private static final MediaType EXCEL_MEDIA_TYPE =
-            MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
     private final CsvProcessingService csvProcessingService;
 
@@ -88,7 +87,7 @@ public class CsvUploadController {
     private ResponseEntity<InputStreamResource> buildExcelResponse(final byte[] excelBytes) {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=migration_output.xlsx")
-                .contentType(EXCEL_MEDIA_TYPE)
+                .contentType(ClientConstants.EXCEL_MEDIA_TYPE)
                 .body(new InputStreamResource(new ByteArrayInputStream(excelBytes)));
     }
 }
