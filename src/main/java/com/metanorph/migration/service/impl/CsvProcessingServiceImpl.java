@@ -360,7 +360,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             assignAutoIncrementIdentifiers(rowData, isClaimHistoryClientTable);
         }
         if (isClaimHistoryClientTable) {
-            rowData.put(ClientConstants.ROLE_CD, "INSURED");
+            rowData.put(ClientConstants.ROLE_CD, "Insured");
             rowData.put("relatedToInsuredCd",
                     resolveRelatedToInsuredCd(rowData.get(ClientConstants.ROLE_CD), csvRecord));
             guidContext.put(ClientConstants.CLAIM_HISTORY_CLIENT_REF_PRIMARY, rowData.get(ClientConstants.CLIENT_REF_GUID));
@@ -793,7 +793,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
              log.warn("Unexpected TPCR_NOM_CLMNT_SAME value: {}", sameFlag);
         }
 
-        relationType = relationType.trim().toUpperCase(Locale.ROOT);
         if ("GUARDIAN".equalsIgnoreCase(relationType)) {
             return ClientConstants.ROLE_APPOINTEE; // "Appointee"
         }
