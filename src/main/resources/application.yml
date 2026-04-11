@@ -81,9 +81,10 @@ table-mapping:
           identifiers:
             - TPCR_CLAIM_DECSN
 
-
       children:
         - CLAIM_HISTORY_POLICY
+        - CLAIM_ADDITIONAL_FIELD
+        - CLAIM_HISTORY_PAYMENT
 
     # =========================================================
     # CLAIM CLIENT (CLAIMANT / NOMINEE)
@@ -164,6 +165,8 @@ table-mapping:
     CLAIM_ADDITIONAL_FIELD:
 
       tableName: CLAIM_ADDITIONAL_FIELD
+      parent: CLAIM_HISTORY
+      parentGuidRef: claimGuid
       skipIfEmpty: true
 
       # Declared for config consistency; values are filled in service logic.
@@ -252,6 +255,8 @@ table-mapping:
     CLAIM_HISTORY_PAYMENT:
 
       tableName: CLAIM_HISTORY_PAYMENT
+      parent: CLAIM_HISTORY
+      parentGuidRef: claim_history_ref_guid
       skipIfEmpty: true
 
       columns:
@@ -295,6 +300,10 @@ table-mapping:
         paymentMethodCd:
           identifiers:
             - Single/Regular
+
+        claim_history_ref_guid:
+          identifiers:
+            - claim_history_ref_guid
 
     CLAIM_HISTORY_COVERAGE:
 
@@ -367,9 +376,13 @@ table-mapping:
           identifiers:
             - TPCR_CUST_ID
 
-    # =========================================================
-    # CLIENT ADDRESS (derived in service logic)
-    # =========================================================
+      children:
+        - CLIENT_ADDRESS
+        - CLIENT_PHONE
+        - CLIENT_EMAIL
+        - CLIENT_RELATIONSHIP
+        - CLIENT_ADD_FLD
+
     CLIENT_ADDRESS:
 
       tableName: CLIENT_ADDRESS
@@ -431,6 +444,8 @@ table-mapping:
     CLIENT_PHONE:
 
       tableName: CLIENT_PHONE
+      parent: CLIENT
+      parentGuidRef: clientGuid
       skipIfEmpty: true
 
       # Declared for config consistency; values are filled in service logic.
@@ -469,6 +484,8 @@ table-mapping:
     CLIENT_EMAIL:
 
       tableName: CLIENT_EMAIL
+      parent: CLIENT
+      parentGuidRef: clientGuid
       skipIfEmpty: true
 
       # Declared for config consistency; values are filled in service logic.
@@ -508,6 +525,8 @@ table-mapping:
     CLIENT_RELATIONSHIP:
 
       tableName: CLIENT_RELATIONSHIP
+      parent: CLIENT
+      parentGuidRef: clientGuid
       skipIfEmpty: true
 
       # Declared for config consistency; values are filled in service logic.
@@ -553,6 +572,8 @@ table-mapping:
     CLIENT_ADD_FLD:
 
       tableName: CLIENT_ADD_FLD
+      parent: CLIENT
+      parentGuidRef: clientGuid
       skipIfEmpty: true
 
       # Declared for config consistency; values are filled in service logic.
@@ -654,12 +675,17 @@ table-mapping:
           identifiers:
             -
 
+      children:
+        - PERSON_IDENTITY
+
     # =========================================================
     # PERSON IDENTITY (derived in service logic)
     # =========================================================
     PERSON_IDENTITY:
 
       tableName: PERSON_IDENTITY
+      parent: PERSON
+      parentGuidRef: personGuid
       skipIfEmpty: true
 
       # Declared for config consistency; values are filled in service logic.
