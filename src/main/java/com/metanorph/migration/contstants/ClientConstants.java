@@ -36,6 +36,7 @@ public class ClientConstants {
     public static final String PERSON_RELATIONSHIP_TYPE_CD = "PERSON";
     public static final String ROLE_CD = "roleCd";
     public static final String TYPE_CD = "typeCd";
+    public static final String CLIENT_CD = "clientCd";
     public static final String ROLE_INSURED = "INSURED";
     public static final String ROLE_NOMINEE = "NOMINEE";
     public static final String ROLE_CLAIMANT = "CLAIMANT";
