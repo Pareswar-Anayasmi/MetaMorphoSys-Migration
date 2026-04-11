@@ -997,11 +997,26 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private String resolvePersonGender(final String roleCd, final CSVRecord csvRecord) {
 
-        return resolveConfiguredRoleBasedValue(
+        final String raw = resolveConfiguredRoleBasedValue(
                 ClientConstants.PERSON_TABLE,
                 "genderCd",
                 csvRecord,
                 preferredPersonGenderIdentifiers(roleCd));
+        return normalizeGenderCd(raw);
+    }
+
+    private String normalizeGenderCd(final String genderCd) {
+        if (genderCd == null) {
+            return "";
+        }
+        final String trimmed = genderCd.trim();
+        if ("M".equalsIgnoreCase(trimmed)) {
+            return "MALE";
+        }
+        if ("F".equalsIgnoreCase(trimmed)) {
+            return "FEMALE";
+        }
+        return trimmed;
     }
 
     private String resolvePersonDateOfBirth(final String roleCd, final CSVRecord csvRecord) {
