@@ -214,7 +214,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
 
         for (Map<String, String> clientRow : claimHistoryClientRows) {
-            final String claimHistoryRefGuid = clientRow.get(ClientConstants.CLAIM_HISTORY_REF_GUID_COL);
+            final String claimHistoryRefGuid = clientRow.get(ClientConstants.CLAIM_HISTORY_REF_GUID);
             if (claimHistoryRefGuid == null || claimHistoryRefGuid.isBlank()) {
                 continue;
             }
@@ -274,7 +274,12 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             }
             final String mappedClientGuid = clientGuidByRef.get(clientRefGuid);
             if (mappedClientGuid != null && !mappedClientGuid.isBlank()) {
+
+                // set clientCd = clientGuid
                 claimHistoryClientRow.put(ClientConstants.CLIENT_CD, mappedClientGuid);
+
+                // 🔥 IMPORTANT: also set clientRefGuid = clientGuid
+                claimHistoryClientRow.put(ClientConstants.CLIENT_REF_GUID, mappedClientGuid);
             }
         }
     }
@@ -372,6 +377,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
 
         normalizeClaimHistoryCauseOfDeathCd(outputTableName, rowData);
+
+        normalizeClaimHistoryStageAndStatusCd(outputTableName, rowData, csvRecord);
 
         if (shouldSkipCoverageOrBenefitRow(outputTableName, rowData)) {
             log.debug("Skipping row for table '{}' due to missing required business column", outputTableName);
@@ -1930,6 +1937,25 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             rowData.put(ClientConstants.CLAIM_HISTORY_EVENT_SUB_TYPE_CD, "Non-Accidental");
         } else if ("ACCIDENTAL".equalsIgnoreCase(eventSubTypeValue)) {
             rowData.put(ClientConstants.CLAIM_HISTORY_EVENT_SUB_TYPE_CD, "Accidental");
+        }
+    }
+
+    private void normalizeClaimHistoryStageAndStatusCd(
+            final String outputTableName,
+            final Map<String, String> rowData,
+            final CSVRecord csvRecord) {
+
+        if (!"CLAIM_HISTORY".equalsIgnoreCase(outputTableName)) {
+            return;
+        }
+
+        final String decision = readCsvValueSafely(csvRecord, "TPCR_CLAIM_DECSN");
+        if ("admit".equalsIgnoreCase(decision)) {
+            rowData.put("stageCd", "PAID");
+            rowData.put("statusCd", "PAID");
+        } else {
+            rowData.put("stageCd", "PENDING_MANUAL_ADJ");
+            rowData.put("statusCd", "DE_COMPLETE");
         }
     }
 }

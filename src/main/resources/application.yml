@@ -81,6 +81,10 @@ table-mapping:
           identifiers:
             - TPCR_CLAIM_DECSN
 
+        stageCd:
+          identifiers:
+            - TPCR_CLAIM_DECSN
+
       children:
         - CLAIM_HISTORY_POLICY
         - CLAIM_ADDITIONAL_FIELD
