@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -28,8 +27,8 @@ import java.io.IOException;
 @RequiredArgsConstructor
 @RequestMapping("/api/migration")
 @CrossOrigin("*")
+@SuppressWarnings("unused")
 public class CsvUploadController {
-
 
     private final CsvProcessingService csvProcessingService;
 
@@ -38,35 +37,29 @@ public class CsvUploadController {
      *
      * @param file the uploaded CSV or Excel file
      * @return a downloadable Excel file as a streaming response
-     * @throws IOException if reading the upload or writing the workbook fails
      */
+    @SuppressWarnings("unused")
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<InputStreamResource> uploadCsv(@RequestParam("file") final MultipartFile file) throws IOException {
-
         log.info("Upload request received. File name: {}", file.getOriginalFilename());
-
         final byte[] excelBytes = buildExcelBytes(file);
-
         log.info("Excel file generated successfully from uploaded file");
-
         return buildExcelResponse(excelBytes);
     }
 
     /**
      * Executes migration using configured DB source table and returns generated Excel workbook.
      */
+    @SuppressWarnings("unused")
     @PostMapping("/execute")
     public ResponseEntity<InputStreamResource> executeFromTable() throws IOException {
-
         log.info("Execute request received. Source: configured database table");
-
         try (Workbook workbook = csvProcessingService.processConfiguredTable();
              ByteArrayOutputStream buffer = new ByteArrayOutputStream()) {
-
-            workbook.write(buffer);
-            final byte[] excelBytes = buffer.toByteArray();
-            log.info("Excel file generated successfully from configured table source");
-            return buildExcelResponse(excelBytes);
+                workbook.write(buffer);
+                final byte[] excelBytes = buffer.toByteArray();
+                log.info("Excel file generated successfully from configured table source");
+                return buildExcelResponse(excelBytes);
         }
     }
 

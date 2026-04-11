@@ -66,4 +66,6 @@ public class ClientConstants {
     public static final String RELATIONSHIP_CD = "relationshipCd";
     public static final String FIELD_KEY = "fieldKey";
     public static final String FIELD_VALUE = "fieldValue";
+    public static final String CLAIM_HISTORY_CAUSE_OF_DEATH_CD = "causeOfDeathCd";
+    public static final String CLAIM_HISTORY_EVENT_SUB_TYPE_CD = "eventSubTypeCd";
 }

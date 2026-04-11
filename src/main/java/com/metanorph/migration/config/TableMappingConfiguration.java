@@ -65,21 +65,16 @@ public class TableMappingConfiguration {
             private Boolean enabled = true;
             private String type;
             private Condition condition;
-
-            // getters/setters
         }
 
         @Data
         public static class Condition {
             private List<String> anyNotEmpty;
-
-            // getters/setters
         }
     }
 
     @Data
     public static class ColumnDefinition {
-
         private List<String> identifiers;
         private String literal;
     }

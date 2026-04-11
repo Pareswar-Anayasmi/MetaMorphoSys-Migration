@@ -161,6 +161,187 @@ table-mapping:
           identifiers:
             - claim_history_ref_guid
 
+    CLAIM_ADDITIONAL_FIELD:
+
+      tableName: CLAIM_ADDITIONAL_FIELD
+      skipIfEmpty: true
+
+      # Declared for config consistency; values are filled in service logic.
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        fromEffectiveDT:
+          identifiers:
+            -
+
+        lastEffectiveDt:
+          identifiers:
+            -
+
+        claimGuid:
+          identifiers:
+            - claimGuid
+
+        claimAddFldGuid:
+          identifiers:
+            - claimAddFldGuid
+
+        fieldKey:
+          identifiers:
+            - TPCR_ID
+            - TPCR_PROCESS
+            - TPCR_NOM_CLMNT_SAME
+            - TPCR_DEATH_CER_ISSUEDBY
+            - TPCR_DOC_RECEIVED
+            - TPCR_PROCEED_WITH
+            - TPCR_CDSL_OPTION
+            - TPCR_SELECT
+            - TPCR_CDSL_REASON
+            - TPCR_REGION
+            - TPCR_SUB_REGION
+            - TPCR_DEATH_CERT_NO
+            - TPCR_DATE_OF_CLOSURE
+            - TPCR_PRIORITY
+            - TPCR_CHKR_ID
+            - TPCR_CHKR_DT
+            - TPCR_DATA_SOURCE
+            - TPCR_JAN_REJECTION_ID
+            - TPCR_JAN_REJECTION_REMARK
+            - TPCR_LIEN_PERIOD_CLAIM
+            - TPCR_IMPS_ID
+            - TPCR_IMPS_STATUS
+            - TPCR_LA_MONBILE
+            - TPCR_REQ_CATEGORY
+            - TPCR_MERGER_FLAG
+            - TPCR_IS_MATCH_DOD_DC
+            - TPCR_IS_MATCH_BENIF_ACC
+
+        fieldValue:
+          identifiers:
+            - TPCR_ID
+            - TPCR_PROCESS
+            - TPCR_NOM_CLMNT_SAME
+            - TPCR_DEATH_CER_ISSUEDBY
+            - TPCR_DOC_RECEIVED
+            - TPCR_PROCEED_WITH
+            - TPCR_CDSL_OPTION
+            - TPCR_SELECT
+            - TPCR_CDSL_REASON
+            - TPCR_REGION
+            - TPCR_SUB_REGION
+            - TPCR_DEATH_CERT_NO
+            - TPCR_DATE_OF_CLOSURE
+            - TPCR_PRIORITY
+            - TPCR_CHKR_ID
+            - TPCR_CHKR_DT
+            - TPCR_DATA_SOURCE
+            - TPCR_JAN_REJECTION_ID
+            - TPCR_JAN_REJECTION_REMARK
+            - TPCR_LIEN_PERIOD_CLAIM
+            - TPCR_IMPS_ID
+            - TPCR_IMPS_STATUS
+            - TPCR_LA_MONBILE
+            - TPCR_REQ_CATEGORY
+            - TPCR_MERGER_FLAG
+            - TPCR_IS_MATCH_DOD_DC
+            - TPCR_IS_MATCH_BENIF_ACC
+
+    CLAIM_HISTORY_PAYMENT:
+
+      tableName: CLAIM_HISTORY_PAYMENT
+      skipIfEmpty: true
+
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        clientRefGuid:
+          identifiers:
+            - clientRefGuid
+
+        policyNum:
+          identifiers:
+            - TPCR_CUST_ID
+
+        accountNumber:
+          identifiers:
+            - TPCR_ACC_NO
+            - TPCR_BENEF_BNK_ACC_NO
+            - TPCR_CLAIMANTBANKACCOUNT
+
+        accountHolderName:
+          identifiers:
+            - TPCR_CLAIMANT_NAME
+
+        bankName:
+          identifiers:
+            - TPCR_BENEF_BNK_NAME
+            - TPCR_CLAIMANTBANK
+
+        branchName:
+          identifiers:
+            - TPCR_BENEF_BRNCH_NAME
+
+        branchIdNum1:
+          identifiers:
+            - TPCR_BENEF_IFSC
+            - TPCR_CLAIMANTBRANCHIFSC
+
+        paymentMethodCd:
+          identifiers:
+            - Single/Regular
+
+    CLAIM_HISTORY_COVERAGE:
+
+      tableName: CLAIM_HISTORY_COVERAGE
+      guidColumn: claimHistoryCoverageGuid
+      skipIfEmpty: false
+
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        claimHistoryCoverageGuid:
+          identifiers:
+            - claimHistoryCoverageGuid
+
+        planCd:
+          identifiers:
+            - PNNJJBY
+
+    CLAIM_HISTORY_COV_BENEFIT:
+
+      tableName: CLAIM_HISTORY_COV_BENEFIT
+      parent: CLAIM_HISTORY_COVERAGE
+      parentGuidRef: claimHistoryCoverageGuid
+      guidColumn: guid
+      skipIfEmpty: false
+
+      columns:
+
+        id:
+          identifiers:
+            - id
+
+        claimHistoryCoverageGuid:
+          identifiers:
+            - claimHistoryCoverageGuid
+
+        benefitCd:
+          identifiers:
+            - PNNJJBY
+
+        guid:
+          identifiers:
+            - guid
+
     CLIENT:
 
       tableName: CLIENT
@@ -415,52 +596,6 @@ table-mapping:
             - TPCR_NOM_DOD
             - TPCR_NOM_EXPIRED
 
-    CLAIM_ADDITIONAL_FIELD:
-
-      tableName: CLAIM_ADDITIONAL_FIELD
-      skipIfEmpty: true
-
-      # Declared for config consistency; values are filled in service logic.
-      columns:
-
-        id:
-          identifiers:
-            - id
-
-        fromEffectiveDT:
-          identifiers:
-            -
-
-        lastEffectiveDt:
-          identifiers:
-            -
-
-        claimGuid:
-          identifiers:
-            - claimGuid
-
-        claimAddFldGuid:
-          identifiers:
-            - claimAddFldGuid
-
-        fieldKey:
-          identifiers:
-            - TPCR_INSURERCODE
-            - TPCR_BANKCODE
-            - TPCR_BRANCH_CODE
-            - TPCR_BANKBRANCHEMAILID
-            - TPCR_NOM_DOD
-            - TPCR_NOM_EXPIRED
-
-        fieldValue:
-          identifiers:
-            - TPCR_INSURERCODE
-            - TPCR_BANKCODE
-            - TPCR_BRANCH_CODE
-            - TPCR_BANKBRANCHEMAILID
-            - TPCR_NOM_DOD
-            - TPCR_NOM_EXPIRED
-
     # =========================================================
     # PERSON (derived in service logic)
     # =========================================================
@@ -555,95 +690,4 @@ table-mapping:
             - TPCR_AADHAARNUMBER
             - TPCR_CKYC_NUMBER
 
-    CLAIM_HISTORY_PAYMENT:
 
-      tableName: CLAIM_HISTORY_PAYMENT
-      skipIfEmpty: true
-
-      columns:
-
-        id:
-          identifiers:
-            - id
-
-        clientRefGuid:
-          identifiers:
-            - clientRefGuid
-
-        policyNum:
-          identifiers:
-            - TPCR_CUST_ID
-
-        accountNumber:
-          identifiers:
-            - TPCR_ACC_NO
-            - TPCR_BENEF_BNK_ACC_NO
-            - TPCR_CLAIMANTBANKACCOUNT
-
-        accountHolderName:
-          identifiers:
-            - TPCR_CLAIMANT_NAME
-
-        bankName:
-          identifiers:
-            - TPCR_BENEF_BNK_NAME
-            - TPCR_CLAIMANTBANK
-
-        branchName:
-          identifiers:
-            - TPCR_BENEF_BRNCH_NAME
-
-        branchIdNum1:
-          identifiers:
-            - TPCR_BENEF_IFSC
-            - TPCR_CLAIMANTBRANCHIFSC
-
-        paymentMethodCd:
-          identifiers:
-            - Single/Regular
-
-    CLAIM_HISTORY_COVERAGE:
-
-      tableName: CLAIM_HISTORY_COVERAGE
-      guidColumn: claimHistoryCoverageGuid
-      skipIfEmpty: false
-
-      columns:
-
-        id:
-          identifiers:
-            - id
-
-        claimHistoryCoverageGuid:
-          identifiers:
-            - claimHistoryCoverageGuid
-
-        planCd:
-          identifiers:
-            - TPCR_SCHEME
-
-    CLAIM_HISTORY_COV_BENEFIT:
-
-      tableName: CLAIM_HISTORY_COV_BENEFIT
-      parent: CLAIM_HISTORY_COVERAGE
-      parentGuidRef: claimHistoryCoverageGuid
-      guidColumn: guid
-      skipIfEmpty: false
-
-      columns:
-
-        id:
-          identifiers:
-            - id
-
-        claimHistoryCoverageGuid:
-          identifiers:
-            - claimHistoryCoverageGuid
-
-        benefitCd:
-          identifiers:
-            - TPCR_SCHEME
-
-        guid:
-          identifiers:
-            - guid
