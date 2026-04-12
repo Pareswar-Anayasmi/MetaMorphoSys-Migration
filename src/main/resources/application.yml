@@ -199,6 +199,7 @@ table-mapping:
         fieldKey:
           identifiers:
             - TPCR_ID
+            - TPCR_ACC_NO
             - TPCR_PROCESS
             - TPCR_NOM_CLMNT_SAME
             - TPCR_DEATH_CER_ISSUEDBY
@@ -229,6 +230,7 @@ table-mapping:
         fieldValue:
           identifiers:
             - TPCR_ID
+            - TPCR_ACC_NO
             - TPCR_PROCESS
             - TPCR_NOM_CLMNT_SAME
             - TPCR_DEATH_CER_ISSUEDBY
@@ -275,11 +277,10 @@ table-mapping:
 
         policyNum:
           identifiers:
-            - TPCR_CUST_ID
+            - TPCR_POLICY_NO
 
         accountNumber:
           identifiers:
-            - TPCR_ACC_NO
             - TPCR_BENEF_BNK_ACC_NO
             - TPCR_CLAIMANTBANKACCOUNT
 
@@ -303,7 +304,7 @@ table-mapping:
 
         paymentMethodCd:
           identifiers:
-            - Single/Regular
+            - BANK TRANSFER
 
         claim_history_ref_guid:
           identifiers:
@@ -312,6 +313,8 @@ table-mapping:
     CLAIM_HISTORY_COVERAGE:
 
       tableName: CLAIM_HISTORY_COVERAGE
+      parent: CLAIM_HISTORY
+      parentGuidRef: CLAIM_HISTORY
       guidColumn: claimHistoryCoverageGuid
       skipIfEmpty: false
 
@@ -325,6 +328,10 @@ table-mapping:
           identifiers:
             - claimHistoryCoverageGuid
 
+        claimRefGuid:
+          identifiers:
+            - CLAIM_HISTORY
+
         planCd:
           identifiers:
             - PNNJJBY
@@ -334,7 +341,7 @@ table-mapping:
       tableName: CLAIM_HISTORY_COV_BENEFIT
       parent: CLAIM_HISTORY_COVERAGE
       parentGuidRef: claimHistoryCoverageGuid
-      guidColumn: guid
+      guidColumn: claimHistoryCovBenefitGuid
       skipIfEmpty: false
 
       columns:
@@ -351,9 +358,9 @@ table-mapping:
           identifiers:
             - PNNJJBY
 
-        guid:
+        claimHistoryCovBenefitGuid:
           identifiers:
-            - guid
+            - claimHistoryCovBenefitGuid
 
     CLIENT:
 
@@ -436,7 +443,7 @@ table-mapping:
 
         prefferedFl:
           identifiers:
-            - TRUE
+            - "TRUE"
 
         districtCd:
           identifiers:
@@ -480,7 +487,7 @@ table-mapping:
 
         prefferedFl:
           identifiers:
-            - TRUE
+            - "TRUE"
 
     # =========================================================
     # CLIENT EMAIL (derived in service logic)
@@ -521,7 +528,7 @@ table-mapping:
 
         prefferedFl:
           identifiers:
-            - TRUE
+            - "TRUE"
 
     # =========================================================
     # CLIENT RELATIONSHIP (derived in service logic)
