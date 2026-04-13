@@ -71,7 +71,7 @@ table-mapping:
 
         approvedAmtPolCurrency:
           identifiers:
-            -
+            - PAYMENT_AMOUNT
 
         typeOfDeathCd:
           identifiers:
@@ -148,7 +148,7 @@ table-mapping:
 
         commencementDt:
           identifiers:
-            -
+            - DATE_OF_JOINING_SCHEME
 
         planCd:
           identifiers:
@@ -226,6 +226,8 @@ table-mapping:
             - TPCR_MERGER_FLAG
             - TPCR_IS_MATCH_DOD_DC
             - TPCR_IS_MATCH_BENIF_ACC
+            - PAYMENT_UTR
+            - PAYMENT_DATE
 
         fieldValue:
           identifiers:
@@ -257,6 +259,8 @@ table-mapping:
             - TPCR_MERGER_FLAG
             - TPCR_IS_MATCH_DOD_DC
             - TPCR_IS_MATCH_BENIF_ACC
+            - PAYMENT_UTR
+            - PAYMENT_DATE
 
     CLAIM_HISTORY_PAYMENT:
 
@@ -481,6 +485,7 @@ table-mapping:
         contactNum:
           identifiers:
             - TPCR_MOBILENUMBER
+            - TPD_MOBILENO
             - TPCR_CLAIMANT_MOBNO
             - TPCR_NOMINEEMOBILENUMBER
             - TPCR_GUARDIANMOBILENUMBER
@@ -662,6 +667,7 @@ table-mapping:
             - TPCR_NOMINEEFIRSTNAME
             - TPCR_BENEF_NAME
             - TPCR_NAMEOFGUARDIAN
+            - TPD_APPLICANTNAME
 
         genderCd:
           identifiers:
@@ -671,6 +677,7 @@ table-mapping:
 
         dateOfBirth:
           identifiers:
+            - TPD_APPLICANT_DOB
             - TPCR_DOB_DECEASED
             - TPCR_CLAIMANT_DOB
             - TPCR_NOM_DOB

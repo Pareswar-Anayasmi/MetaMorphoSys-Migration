@@ -73,4 +73,5 @@ public class ClientConstants {
     public static final String CLIENT_GUID_TO = "clientGuidTo";
     public static final String NATURAL = "NATURAL";
     public static final String CLIENT_NUM = "clientNum";
+    public static final String CLIENT_NUM_TO_COL = "clientNumTo";
 }
