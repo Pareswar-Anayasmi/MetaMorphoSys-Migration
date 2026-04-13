@@ -818,7 +818,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         String claimHistoryRefGuid =
                 claimHistoryClientRow.get(ClientConstants.CLAIM_HISTORY_REF_GUID);
 
-        final String accountNumber = resolveAccountNumber(roleCd, csvRecord);
+        final String accountNumber = resolveAccountNumber(csvRecord);
         if (accountNumber.isBlank()) {
             return;
         }
@@ -834,8 +834,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                         "clientRefGuid", clientRefGuid,
                         "claim_history_ref_guid", claimHistoryRefGuid,
                         "accountNumber", accountNumber,
-                        "bankName", resolveBankName(roleCd, csvRecord),
-                        "branchIdNum1", resolveIfsc(roleCd, csvRecord),
+                        "bankName", resolveBankName(csvRecord),
+                        "branchIdNum1", resolveIfsc(csvRecord),
                         "paymentMethodCd", "BANK_TRANSFER"
 
                 ));
@@ -843,29 +843,34 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         addRowToConfiguredTable(tableData, ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE, row);
     }
 
-    private String resolveAccountNumber(String roleCd, CSVRecord csvRecord) {
+    private String resolveAccountNumber(CSVRecord csvRecord) {
 
-        return resolveConfiguredRoleBasedValue(
-                ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE,
-                "accountNumber",
-                csvRecord,
-                preferredAccountNumberIdentifiers(roleCd));
+        // Prefer TPCR_CLAIMANTBANKACCOUNT; if both have a value TPCR_CLAIMANTBANKACCOUNT wins
+        String claimantAcc = readCsvValueSafely(csvRecord, "TPCR_CLAIMANTBANKACCOUNT");
+        if (!claimantAcc.isBlank()) {
+            return claimantAcc;
+        }
+        return readCsvValueSafely(csvRecord, "TPCR_BENEF_BNK_ACC_NO");
     }
-    private String resolveBankName(String roleCd, CSVRecord csvRecord) {
 
-        return resolveConfiguredRoleBasedValue(
-                ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE,
-                "bankName",
-                csvRecord,
-                preferredBankNameIdentifiers(roleCd));
+    private String resolveBankName(CSVRecord csvRecord) {
+
+        // Prefer TPCR_CLAIMANTBANK; if both have a value TPCR_CLAIMANTBANK wins
+        String claimantBank = readCsvValueSafely(csvRecord, "TPCR_CLAIMANTBANK");
+        if (!claimantBank.isBlank()) {
+            return claimantBank;
+        }
+        return readCsvValueSafely(csvRecord, "TPCR_BENEF_BNK_NAME");
     }
-    private String resolveIfsc(String roleCd, CSVRecord csvRecord) {
 
-        return resolveConfiguredRoleBasedValue(
-                ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE,
-                "branchIdNum1",
-                csvRecord,
-                preferredIfscIdentifiers(roleCd));
+    private String resolveIfsc(CSVRecord csvRecord) {
+
+        // Prefer TPCR_CLAIMANTBRANCHIFSC; if both have a value TPCR_CLAIMANTBRANCHIFSC wins
+        String claimantIfsc = readCsvValueSafely(csvRecord, "TPCR_CLAIMANTBRANCHIFSC");
+        if (!claimantIfsc.isBlank()) {
+            return claimantIfsc;
+        }
+        return readCsvValueSafely(csvRecord, "TPCR_BENEF_IFSC");
     }
 
     private String resolveRelatedToInsuredCd(final String roleCd, final CSVRecord csvRecord) {
@@ -1958,34 +1963,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         return List.of(ClientConstants.CSV_COL_DOB_DECEASED);
     }
 
-    private List<String> preferredAccountNumberIdentifiers(final String roleCd) {
-
-        if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd)
-                || ClientConstants.ROLE_APPOINTEE.equalsIgnoreCase(roleCd)
-                || ClientConstants.ROLE_GUARDIAN.equalsIgnoreCase(roleCd)) {
-            return List.of("TPCR_BENEF_BNK_ACC_NO");
-        }
-        if (ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
-            return List.of("TPCR_CLAIMANTBANKACCOUNT");
-        }
-        return List.of("TPCR_BENEF_BNK_ACC_NO");
-    }
-
-    private List<String> preferredBankNameIdentifiers(final String roleCd) {
-
-        if (ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
-            return List.of("TPCR_CLAIMANTBANK");
-        }
-        return List.of("TPCR_BENEF_BNK_NAME");
-    }
-
-    private List<String> preferredIfscIdentifiers(final String roleCd) {
-
-        if (ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
-            return List.of("TPCR_CLAIMANTBRANCHIFSC");
-        }
-        return List.of("TPCR_BENEF_IFSC");
-    }
 
     private String emptyIfNull(final String value) {
         return value == null ? "" : value;
