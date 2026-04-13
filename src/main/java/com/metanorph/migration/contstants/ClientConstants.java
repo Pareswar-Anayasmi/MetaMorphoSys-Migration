@@ -71,4 +71,5 @@ public class ClientConstants {
     public static final String CLAIM_HISTORY_EVENT_SUB_TYPE_CD = "eventSubTypeCd";
     public static final String CLAIM_HISTORY = "CLAIM_HISTORY";
     public static final String CLIENT_GUID_TO = "clientGuidTo";
+    public static final String NATURAL = "NATURAL";
 }

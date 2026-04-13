@@ -71,7 +71,7 @@ table-mapping:
 
         approvedAmtPolCurrency:
           identifiers:
-            - TPCR_APPROVEDAMT
+            -
 
         typeOfDeathCd:
           identifiers:

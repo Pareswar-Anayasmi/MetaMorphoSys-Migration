@@ -571,8 +571,9 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         appendClientEmailRow(tableData, rowData, csvRecord);
         appendClientAddFldRows(tableData, rowData, csvRecord);
         appendClaimantAddFldRows(tableData, rowData, csvRecord);
+        final String roleCd = rowData.get(ClientConstants.ROLE_CD);
         final String personGuid = appendPersonRow(tableData, rowData, csvRecord);
-        appendPersonIdentityRows(tableData, personGuid, csvRecord);
+        appendPersonIdentityRows(tableData, personGuid, roleCd, csvRecord);
         appendClaimHistoryPaymentRow(tableData, rowData, csvRecord);
     }
 
@@ -677,7 +678,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 appendClientAddFldRows(tableData, additionalClaimHistoryClientRow, csvRecord);
                 appendClaimantAddFldRows(tableData, additionalClaimHistoryClientRow, csvRecord);
                 final String personGuid = appendPersonRow(tableData, additionalClaimHistoryClientRow, csvRecord);
-                appendPersonIdentityRows(tableData, personGuid, csvRecord);
+                appendPersonIdentityRows(tableData, personGuid, resolvedRole, csvRecord);
                 appendClaimHistoryPaymentRow(tableData, additionalClaimHistoryClientRow, csvRecord);
             }
             return;
@@ -757,35 +758,82 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     /**
-     * Creates PERSON_IDENTITY rows linked to a given personGuid.
+     * Creates PERSON_IDENTITY rows linked to a given personGuid, role-based.
+     * - INSURED      : identityTypeCd from TPCR_KYC_DECEASED_SUBMIT, identityNum = blank
+     * - NOMINEE/CLAIMANT : multiple pairs; each skipped if both typeCd and num are blank
+     * - Other roles  : no rows created
      */
     private void appendPersonIdentityRows(
             final Map<String, List<Map<String, String>>> tableData,
             final String personGuid,
+            final String roleCd,
             final CSVRecord csvRecord) {
 
-        if (personGuid.isBlank()) {
+        if (personGuid == null || personGuid.isBlank()) {
             return;
         }
 
-        // KYC / Identity mappings
-        addIdentity(tableData, personGuid, "KYC", readCsvValueSafely(csvRecord, "TPCR_KYCID1_NUMBER"));
-        addIdentity(tableData, personGuid, "KYC", readCsvValueSafely(csvRecord, "TPCR_KYCID2_NUMBER"));
-        addIdentity(tableData, personGuid, "KYC", readCsvValueSafely(csvRecord, "TPCR_KYCID1NUMBER"));
+        if (ClientConstants.INSURED.equalsIgnoreCase(roleCd)) {
+            // INSURED: identityTypeCd = TPCR_KYC_DECEASED_SUBMIT value, identityNum = blank
+            final String typeCd = readCsvValueSafely(csvRecord, "TPCR_KYC_DECEASED_SUBMIT");
+            addIdentity(tableData, personGuid, typeCd, "");
+            return;
+        }
 
-        addIdentity(tableData, personGuid, "PAN/ADHAAR", readCsvValueSafely(csvRecord, "TPCR_PANNUMBER"));
-        addIdentity(tableData, personGuid, "PAN/ADHAAR", readCsvValueSafely(csvRecord, "TPCR_AADHAARNUMBER"));
+        if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd)
+                || ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
 
-        addIdentity(tableData, personGuid, "CKYC", readCsvValueSafely(csvRecord, "TPCR_CKYC_NUMBER"));
+            // identityTypeCd from TPCR_KYC_NOM_SUBMIT, identityNum = blank
+            addIdentity(tableData, personGuid,
+                    readCsvValueSafely(csvRecord, "TPCR_KYC_NOM_SUBMIT"), "");
+
+            // identityTypeCd from TPCR_KYCID1, identityNum from TPCR_KYCID1_NUMBER
+            addIdentity(tableData, personGuid,
+                    readCsvValueSafely(csvRecord, "TPCR_KYCID1"),
+                    readCsvValueSafely(csvRecord, "TPCR_KYCID1_NUMBER"));
+
+            // identityTypeCd from TPCR_KYCID2, identityNum from TPCR_KYCID2_NUMBER
+            addIdentity(tableData, personGuid,
+                    readCsvValueSafely(csvRecord, "TPCR_KYCID2"),
+                    readCsvValueSafely(csvRecord, "TPCR_KYCID2_NUMBER"));
+
+            // identityTypeCd from TPCR_KYC_ID1, identityNum from TPCR_KYCID1NUMBER
+            addIdentity(tableData, personGuid,
+                    readCsvValueSafely(csvRecord, "TPCR_KYC_ID1"),
+                    readCsvValueSafely(csvRecord, "TPCR_KYCID1NUMBER"));
+
+            // identityTypeCd from TPCR_CKYC, identityNum from TPCR_CKYC_NUMBER
+            addIdentity(tableData, personGuid,
+                    readCsvValueSafely(csvRecord, "TPCR_CKYC"),
+                    readCsvValueSafely(csvRecord, "TPCR_CKYC_NUMBER"));
+
+            // identityTypeCd = literal "PAN", identityNum from TPCR_PANNUMBER
+            addIdentity(tableData, personGuid,
+                    "PAN",
+                    readCsvValueSafely(csvRecord, "TPCR_PANNUMBER"));
+
+            // identityTypeCd = literal "AADHAR", identityNum from TPCR_AADHAARNUMBER
+            addIdentity(tableData, personGuid,
+                    "AADHAR",
+                    readCsvValueSafely(csvRecord, "TPCR_AADHAARNUMBER"));
+        }
+        // All other roles: no PERSON_IDENTITY rows
     }
 
+    /**
+     * Adds a single PERSON_IDENTITY row. Skips if BOTH identityTypeCd and identityNum are blank.
+     */
     private void addIdentity(
             final Map<String, List<Map<String, String>>> tableData,
             final String personGuid,
             final String identityTypeCd,
             final String identityNum) {
 
-        if (identityNum == null || identityNum.isBlank()) {
+        final String safeTypeCd = identityTypeCd == null ? "" : identityTypeCd.trim();
+        final String safeNum    = identityNum    == null ? "" : identityNum.trim();
+
+        // Skip if both are blank
+        if (safeTypeCd.isBlank() && safeNum.isBlank()) {
             return;
         }
 
@@ -794,8 +842,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         row.put("id", String.valueOf(personIdentityIdCounter++));
         row.put("personIdentityGuid", UUID.randomUUID().toString());
         row.put(ClientConstants.PERSON_GUID_COL, personGuid);
-        row.put("identityTypeCd", identityTypeCd);
-        row.put("identityNum", identityNum);
+        row.put("identityTypeCd", safeTypeCd);
+        row.put("identityNum", safeNum);
 
         addRowToConfiguredTable(tableData, ClientConstants.PERSON_IDENTITY_TABLE, row);
     }
@@ -2191,17 +2239,17 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
 
         final String currentValue = emptyIfNull(rowData.get(ClientConstants.CLAIM_HISTORY_CAUSE_OF_DEATH_CD)).trim();
-        if ("NATURAL".equalsIgnoreCase(currentValue)) {
-            rowData.put(ClientConstants.CLAIM_HISTORY_CAUSE_OF_DEATH_CD, "Non-Accidental");
+        if (ClientConstants.NATURAL.equalsIgnoreCase(currentValue)) {
+            rowData.put(ClientConstants.CLAIM_HISTORY_CAUSE_OF_DEATH_CD, ClientConstants.NATURAL);
         } else if ("ACCIDENTAL".equalsIgnoreCase(currentValue)) {
-            rowData.put(ClientConstants.CLAIM_HISTORY_CAUSE_OF_DEATH_CD, "Accidental");
+            rowData.put(ClientConstants.CLAIM_HISTORY_CAUSE_OF_DEATH_CD, "UNNATURAL");
         }
 
         final String eventSubTypeValue = emptyIfNull(rowData.get(ClientConstants.CLAIM_HISTORY_EVENT_SUB_TYPE_CD)).trim();
         if ("NATURAL".equalsIgnoreCase(eventSubTypeValue)) {
-            rowData.put(ClientConstants.CLAIM_HISTORY_EVENT_SUB_TYPE_CD, "Non-Accidental");
+            rowData.put(ClientConstants.CLAIM_HISTORY_EVENT_SUB_TYPE_CD, "NATURAL");
         } else if ("ACCIDENTAL".equalsIgnoreCase(eventSubTypeValue)) {
-            rowData.put(ClientConstants.CLAIM_HISTORY_EVENT_SUB_TYPE_CD, "Accidental");
+            rowData.put(ClientConstants.CLAIM_HISTORY_EVENT_SUB_TYPE_CD, "UNNATURAL");
         }
     }
 
