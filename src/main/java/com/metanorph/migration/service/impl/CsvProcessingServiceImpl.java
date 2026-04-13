@@ -149,8 +149,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     /**
      * Reads configured DB table, converts data to CSV, and processes it into Excel.
      */
-    public Workbook
-    processCsv(final Reader reader) {
+    public Workbook processCsv(final Reader reader) {
 
         log.info("Starting CSV processing");
         resetIdCounters();
@@ -466,8 +465,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
     }
 
-    // ── Per-row processing ────────────────────────────────────────────────────
-
     /**
      * Processes one CSV row across all configured tables.
      * A fresh {@code guidContext} is created per row so GUIDs never leak between rows.
@@ -531,7 +528,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
 
         if (isClientTable || isClaimHistoryClientTable) {
-
             if (isClientTable) {
                 appendClientRelationshipRow(tableData, rowData, csvRecord, guidContext);
             }
@@ -597,38 +593,29 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private void normalizeClientRelationshipGuidTo(final Map<String, List<Map<String, String>>> tableData) {
 
         final List<Map<String, String>> relationshipRows = getConfiguredRows(tableData, ClientConstants.CLIENT_RELATIONSHIP_TABLE);
-
         if (relationshipRows == null || relationshipRows.isEmpty()) {
             return;
         }
 
         // Map<clientNumTo, firstClientGuidTo>
         final Map<String, String> firstGuidByClientNumTo = new HashMap<>();
-
         for (Map<String, String> row : relationshipRows) {
-
             String clientNumTo = row.get(ClientConstants.CLIENT_NUM_TO_COL); // use exact column name
             String clientGuidTo = row.get(ClientConstants.CLIENT_GUID_TO);
-
             if (clientNumTo == null || clientNumTo.isBlank()) {
                 continue;
             }
-
             // store first occurrence
             firstGuidByClientNumTo.putIfAbsent(clientNumTo, clientGuidTo);
         }
 
         // apply to all rows
         for (Map<String, String> row : relationshipRows) {
-
             String clientNumTo = row.get(ClientConstants.CLIENT_NUM_TO_COL);
-
             if (clientNumTo == null || clientNumTo.isBlank()) {
                 continue;
             }
-
             String correctGuidTo = firstGuidByClientNumTo.get(clientNumTo);
-
             if (correctGuidTo != null && !correctGuidTo.isBlank()) {
                 row.put("clientGuidTo", correctGuidTo);
             }
@@ -639,11 +626,9 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
         final List<Map<String, String>> relationshipRows = getConfiguredRows(tableData, ClientConstants.CLIENT_RELATIONSHIP_TABLE);
         final List<Map<String, String>> clientRows = getConfiguredRows(tableData, ClientConstants.CLIENT_TABLE);
-
         if (relationshipRows == null || relationshipRows.isEmpty() || clientRows == null || clientRows.isEmpty()) {
             return;
         }
-
         final Map<String, String> clientNumByGuid = buildClientNumByGuid(clientRows);
         applyClientNumToRelationshipRows(relationshipRows, clientNumByGuid);
     }
@@ -749,7 +734,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private void assignAutoIncrementIdentifiers(final Map<String, String> rowData, final boolean isClaimHistoryClientTable) {
-
         final String nextId = isClaimHistoryClientTable ? String.valueOf(nextClaimHistoryClientId()) : String.valueOf(nextClientId());
         rowData.put(ClientConstants.ID, nextId);
 
@@ -857,14 +841,12 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
         final Map<String, String> row = new LinkedHashMap<>();
         final String claimHistoryClientRefGuid = UUID.randomUUID().toString();
-
         row.put(ClientConstants.ID, String.valueOf(nextClaimHistoryClientId()));
         row.put(ClientConstants.CLIENT_REF_GUID, claimHistoryClientRefGuid);
         row.put(ClientConstants.CLAIM_HISTORY_REF_GUID_COL, baseRow.get(ClientConstants.CLAIM_HISTORY_REF_GUID_COL));
         row.put("clientCd", baseRow.get("clientCd"));
         row.put(ClientConstants.ROLE_CD, resolvedRole);
         row.put("relatedToInsuredCd", resolveRelatedToInsuredCd(resolvedRole, csvRecord));
-
         guidContext.put(ClientConstants.CLAIM_HISTORY_CLIENT_REF_SECONDARY, claimHistoryClientRefGuid);
         registerRelationshipCd(guidContext, claimHistoryClientRefGuid, resolvedRole, csvRecord);
         return row;
@@ -907,25 +889,18 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
 
         if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd) || ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
-
             // identityTypeCd from TPCR_KYC_NOM_SUBMIT, identityNum = blank
             addIdentity(tableData, personGuid, readCsvValueSafely(csvRecord, "TPCR_KYC_NOM_SUBMIT"), "");
-
             // identityTypeCd from TPCR_KYCID1, identityNum from TPCR_KYCID1_NUMBER
             addIdentity(tableData, personGuid, readCsvValueSafely(csvRecord, "TPCR_KYCID1"), readCsvValueSafely(csvRecord, "TPCR_KYCID1_NUMBER"));
-
             // identityTypeCd from TPCR_KYCID2, identityNum from TPCR_KYCID2_NUMBER
             addIdentity(tableData, personGuid, readCsvValueSafely(csvRecord, "TPCR_KYCID2"), readCsvValueSafely(csvRecord, "TPCR_KYCID2_NUMBER"));
-
             // identityTypeCd from TPCR_KYC_ID1, identityNum from TPCR_KYCID1NUMBER
             addIdentity(tableData, personGuid, readCsvValueSafely(csvRecord, "TPCR_KYC_ID1"), readCsvValueSafely(csvRecord, "TPCR_KYCID1NUMBER"));
-
             // identityTypeCd from TPCR_CKYC, identityNum from TPCR_CKYC_NUMBER
             addIdentity(tableData, personGuid, readCsvValueSafely(csvRecord, "TPCR_CKYC"), readCsvValueSafely(csvRecord, "TPCR_CKYC_NUMBER"));
-
             // identityTypeCd = literal "PAN", identityNum from TPCR_PANNUMBER
             addIdentity(tableData, personGuid, "PAN", readCsvValueSafely(csvRecord, "TPCR_PANNUMBER"));
-
             // identityTypeCd = literal "AADHAR", identityNum from TPCR_AADHAARNUMBER
             addIdentity(tableData, personGuid, "AADHAR", readCsvValueSafely(csvRecord, "TPCR_AADHAARNUMBER"));
         }
@@ -950,13 +925,11 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
 
         final Map<String, String> row = new LinkedHashMap<>();
-
         row.put("id", String.valueOf(personIdentityIdCounter++));
         row.put("personIdentityGuid", UUID.randomUUID().toString());
         row.put(ClientConstants.PERSON_GUID_COL, personGuid);
         row.put("identityTypeCd", safeTypeCd);
         row.put("identityNum", safeNum);
-
         addRowToConfiguredTable(tableData, ClientConstants.PERSON_IDENTITY_TABLE, row);
     }
 
@@ -1060,15 +1033,13 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if ("Mother".equalsIgnoreCase(relation) || "Father".equalsIgnoreCase(relation)) {
             return "PARENT";
         }
-        if ("Cousin".equalsIgnoreCase(relation) || "Sister".equalsIgnoreCase(relation)
-                || "Brother".equalsIgnoreCase(relation)) {
+        if ("Cousin".equalsIgnoreCase(relation) || "Sister".equalsIgnoreCase(relation) || "Brother".equalsIgnoreCase(relation)) {
             return "SIBLING";
         }
         return "";
     }
 
     private String normalizeRelationshipCd(final String relationshipCd) {
-
         final String mapped = mapRelationToRelatedToInsuredCd(relationshipCd);
         if (!mapped.isBlank()) {
             return mapped;
@@ -1104,7 +1075,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
         final String clientRefGuid = clientRow.getOrDefault(ClientConstants.CLIENT_REF_GUID, "");
         final String relationshipCd = normalizeRelationshipCd(resolveRelationshipCdForClientRef(clientRefGuid, guidContext, csvRecord));
-
         final Map<String, String> relationshipRow = buildConfiguredDerivedRow(
                 ClientConstants.CLIENT_RELATIONSHIP_TABLE,
                 csvRecord,
@@ -1116,7 +1086,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                         ClientConstants.CLIENT_GUID_LINK, clientRefGuid,
                         "clientRelationshipGuid", UUID.randomUUID().toString()
                 ));
-
         addRowToConfiguredTable(tableData, ClientConstants.CLIENT_RELATIONSHIP_TABLE, relationshipRow);
     }
 
@@ -1153,12 +1122,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (secondary != null && !secondary.isBlank()) {
             return secondary;
         }
-
         final String primary = guidContext.get(ClientConstants.CLAIM_HISTORY_CLIENT_REF_PRIMARY);
         if (primary != null && !primary.isBlank()) {
             return primary;
         }
-
         return UUID.randomUUID().toString();
     }
 
@@ -1168,7 +1135,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private List<String> resolveAdditionalRoles(final CSVRecord csvRecord) {
 
         String relationType = readCsvValueSafely(csvRecord, "TPCR_REL_TYPE");
-
         if (relationType.isBlank()) {
             return List.of();
         }
@@ -1211,13 +1177,11 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final CSVRecord csvRecord) {
 
         final String addressLine1 = resolveAddressLine1(claimHistoryClientRow.get(ClientConstants.ROLE_CD), csvRecord);
-
         // ADD THIS CHECK
         if (addressLine1.trim().isEmpty()) {
             log.debug("Skipping CLIENT_ADDRESS row – addressLine1 is blank");
             return;
         }
-
         final Map<String, String> clientAddressRow = buildConfiguredDerivedRow(
                 ClientConstants.CLIENT_ADDRESS_TABLE,
                 csvRecord,
@@ -1228,12 +1192,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                         ClientConstants.TYPE_CD, ClientConstants.RESIDENCE_TYPE_CD,
                         "addressLine1", addressLine1
                 ));
-
         addRowToConfiguredTable(tableData, ClientConstants.CLIENT_ADDRESS_TABLE, clientAddressRow);
     }
 
     private String resolveAddressLine1(final String roleCd, final CSVRecord csvRecord) {
-
         return resolveConfiguredRoleBasedValue(
                 ClientConstants.CLIENT_ADDRESS_TABLE,
                 "addressLine1",
@@ -1253,7 +1215,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (ClientConstants.INSURED.equalsIgnoreCase(roleCd)) {
             final String mobileNumber = readCsvValueSafely(csvRecord, ClientConstants.CSV_COL_MOBILE_NUMBER);
             final String tpdMobileNumber = readCsvValueSafely(csvRecord, "TPD_MOBILENO");
-
             if (mobileNumber.isBlank() && tpdMobileNumber.isBlank()) {
                 log.debug("Skipping CLIENT_PHONE row – both insured contact numbers are blank");
                 return;
@@ -1273,7 +1234,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             log.debug("Skipping CLIENT_PHONE row – contactNum is blank for roleCd '{}'", roleCd);
             return;
         }
-
         addClientPhoneRow(tableData, claimHistoryClientRow, csvRecord, contactNum);
     }
 
@@ -1293,12 +1253,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                         ClientConstants.TYPE_CD, ClientConstants.MOBILE_TYPE_CD,
                         "contactNum", contactNum
                 ));
-
         addRowToConfiguredTable(tableData, ClientConstants.CLIENT_PHONE_TABLE, clientPhoneRow);
     }
 
     private String resolveContactNum(final String roleCd, final CSVRecord csvRecord) {
-
         return resolveConfiguredRoleBasedValue(
                 ClientConstants.CLIENT_PHONE_TABLE,
                 "contactNum",
@@ -1346,7 +1304,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
 
         final String clientRefGuid = claimHistoryClientRow.getOrDefault(ClientConstants.CLIENT_REF_GUID, "");
-
         appendConfiguredAdditionalFieldRows(
                 tableData,
                 ClientConstants.CLIENT_ADD_FLD_TABLE,
@@ -1386,7 +1343,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
         final String roleCd = claimHistoryClientRow.get(ClientConstants.ROLE_CD);
         final String firstName = resolvePersonFirstName(roleCd, csvRecord);
-
         String personGuid = UUID.randomUUID().toString();
         String rawAge = resolvePersonAge(roleCd, csvRecord);
         String cleanedAge = extractYearsOnly(rawAge);
@@ -1403,29 +1359,22 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                         "age", cleanedAge,
                         "otherName", resolvePersonOtherName(roleCd, csvRecord)
                 ));
-
         addRowToConfiguredTable(tableData, ClientConstants.PERSON_TABLE, personRow);
         return personGuid;
     }
 
     private String extractYearsOnly(String rawAge) {
-
         if (rawAge == null || rawAge.isBlank()) {
             return "";
         }
-
-        // Extract first number only
         String[] parts = rawAge.trim().split("\\s+");
-
         if (parts.length > 0) {
             return parts[0]; // "32"
         }
-
         return "";
     }
 
     private String resolvePersonFirstName(final String roleCd, final CSVRecord csvRecord) {
-
         return resolveConfiguredRoleBasedValue(
                 ClientConstants.PERSON_TABLE,
                 "firstName",
@@ -1434,7 +1383,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String resolvePersonGender(final String roleCd, final CSVRecord csvRecord) {
-
         final String raw = resolveConfiguredRoleBasedValue(
                 ClientConstants.PERSON_TABLE,
                 "genderCd",
@@ -1458,7 +1406,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String resolvePersonDateOfBirth(final String roleCd, final CSVRecord csvRecord) {
-
         return resolveConfiguredRoleBasedValue(
                 ClientConstants.PERSON_TABLE,
                 "dateOfBirth",
@@ -1467,17 +1414,13 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String resolvePersonAge(final String roleCd, final CSVRecord csvRecord) {
-
         if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd) || ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
-            // Age only for Nominee/Claimant
             return readCsvValueSafely(csvRecord, "TPCR_NOM_AGE");
         }
-        // For all other roles: return empty (no age)
         return "";
     }
 
     private String resolveEmailId(final String roleCd, final CSVRecord csvRecord) {
-
         return resolveConfiguredRoleBasedValue(
                 ClientConstants.CLIENT_EMAIL_TABLE,
                 "emailId",
@@ -1492,7 +1435,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (condition == null) {
             return false;
         }
-
         final List<String> anyNotEmpty = condition.getAnyNotEmpty();
         if (anyNotEmpty == null || anyNotEmpty.isEmpty()) {
             return false;
@@ -1523,7 +1465,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             populateColumns(csvRecord, tableDef, currentTableGuid, rowData, guidContext);
             return rowData;
         }
-
         return null;
     }
 
@@ -1536,14 +1477,11 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (tableDef.getParent() == null || tableDef.getParentGuidRef() == null) {
             return true;
         }
-
         final String parentGuid = guidContext.get(tableDef.getParent());
-
         if (parentGuid == null || parentGuid.isBlank()) {
             log.debug("Parent '{}' has no GUID in context – child row will be skipped", tableDef.getParent());
             return false;
         }
-
         return true;
     }
 
@@ -1556,14 +1494,11 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (tableDef.getRootGuidRef() == null) {
             return true;
         }
-
         final String rootGuid = guidContext.get(tableDef.getRootTable() != null ? tableDef.getRootTable() : "client");
-
         if (rootGuid == null || rootGuid.isBlank()) {
             log.debug("Root GUID missing in context – row will be skipped");
             return false;
         }
-
         return true;
     }
 
@@ -1580,7 +1515,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (tableDef.getColumns() == null) {
             return;
         }
-
         tableDef.getColumns().forEach((columnName, columnDef) ->
                 rowData.put(columnName, resolveColumnValue(csvRecord, tableDef, currentTableGuid, guidContext, columnDef)));
     }
@@ -1594,7 +1528,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (guidMappedValue != null) {
             return guidMappedValue;
         }
-
         return resolveConfiguredColumnValue(columnDef, csvRecord);
     }
 
@@ -1608,9 +1541,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (!Boolean.TRUE.equals(tableDef.getSkipIfEmpty())) {
             return false;
         }
-
         final Set<String> fkColumns = buildFkColumnSet(tableDef);
-
         return rowData.entrySet().stream()
                 .filter(entry -> !fkColumns.contains(entry.getKey()))
                 .allMatch(entry -> entry.getValue() == null || entry.getValue().isEmpty());
@@ -1645,14 +1576,11 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (tableMappingConfiguration.getTables() == null) {
             throw new IllegalStateException("table-mapping.tables configuration is missing in YAML.");
         }
-
         final Map<String, List<Map<String, String>>> tableData = new LinkedHashMap<>();
-
         tableMappingConfiguration.getTables().forEach((logicalName, def) -> {
             final String outputTableName = resolveOutputTableName(logicalName, def);
             tableData.putIfAbsent(outputTableName, new ArrayList<>());
         });
-
         return tableData;
     }
 
@@ -1668,14 +1596,12 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
         final ResultSetMetaData metaData = resultSet.getMetaData();
         final int columnCount = metaData.getColumnCount();
-
         try (StringWriter writer = new StringWriter(); CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT)) {
             final List<String> headers = new ArrayList<>(columnCount);
             for (int i = 1; i <= columnCount; i++) {
                 headers.add(resolveColumnLabel(metaData, i));
             }
             csvPrinter.printRecord(headers);
-
             int rowCount = 0;
             while (resultSet.next()) {
                 rowCount++;
@@ -1699,24 +1625,20 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (label != null && !label.isBlank()) {
             return label.trim();
         }
-
         final String fallback = metaData.getColumnName(columnIndex);
         return fallback == null ? "" : fallback.trim();
     }
 
     private String safeReadAsString(final ResultSet resultSet, final int columnIndex) throws SQLException {
-
         final Object value = resultSet.getObject(columnIndex);
         return value == null ? "" : String.valueOf(value);
     }
 
     private void loadDriverIfConfigured() {
-
         final String driverClassName = dbSourceProperties.getDriverClassName();
         if (driverClassName == null || driverClassName.isBlank()) {
             return;
         }
-
         try {
             Class.forName(driverClassName.trim());
         } catch (ClassNotFoundException ex) {
@@ -1725,7 +1647,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String validateSqlIdentifier(final String identifier) {
-
         final String trimmed = identifier == null ? "" : identifier.trim();
         if (!ClientConstants.SAFE_SQL_IDENTIFIER.matcher(trimmed).matches()) {
             throw new IllegalArgumentException("Invalid SQL identifier configured for migration.db.source-table.");
@@ -1777,16 +1698,13 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (isParentGuidRefColumn(tableDef, columnDef)) {
             return emptyIfNull(guidContext.get(tableDef.getParent()));
         }
-
         if (isRootGuidRefColumn(tableDef, columnDef)) {
             final String rootTable = tableDef.getRootTable() != null ? tableDef.getRootTable() : "client";
             return emptyIfNull(guidContext.get(rootTable));
         }
-
         if (isGuidIdentifierColumn(tableDef, columnDef, currentTableGuid)) {
             return emptyIfNull(currentTableGuid);
         }
-
         return null;
     }
 
@@ -1797,7 +1715,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (tableMappingConfiguration.getTables() == null) {
             return configuredHeadersBySheet;
         }
-
         tableMappingConfiguration.getTables().forEach((logicalTableName, definition) -> {
             final List<String> headers = buildConfiguredHeaders(definition);
             configuredHeadersBySheet.put(resolveOutputTableName(logicalTableName, definition), headers);
@@ -1811,18 +1728,15 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (definition == null) {
             return headers;
         }
-
         if (definition.getColumns() != null && definition.getColumns().containsKey(ClientConstants.ID)) {
             headers.add(ClientConstants.ID);
         }
-
         if (definition.getGuidColumn() != null && !definition.getGuidColumn().isBlank()) {
             final String guidColumn = definition.getGuidColumn().trim();
             if (!headers.contains(guidColumn)) {
                 headers.add(guidColumn);
             }
         }
-
         if (definition.getColumns() != null) {
             headers.addAll(definition.getColumns().keySet());
         }
@@ -1836,7 +1750,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
         final Map<String, String> row = createConfiguredRow(logicalTableName);
         final TableDefinition tableDefinition = getTableDefinition(logicalTableName);
-
         if (tableDefinition != null && tableDefinition.getColumns() != null) {
             tableDefinition.getColumns().forEach((columnName, columnDefinition) -> {
                 if (overrides.containsKey(columnName)) {
@@ -1846,7 +1759,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 row.put(columnName, resolveConfiguredColumnValue(columnDefinition, csvRecord));
             });
         }
-
         overrides.forEach((key, value) -> row.putIfAbsent(key, emptyIfNull(value)));
         return row;
     }
@@ -1858,7 +1770,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (tableDefinition == null || tableDefinition.getColumns() == null) {
             return row;
         }
-
         tableDefinition.getColumns().forEach((columnName, ignored) -> row.put(columnName, ""));
         return row;
     }
@@ -1881,7 +1792,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (tableDefinition == null || tableDefinition.getColumns() == null) {
             return "";
         }
-
         final TableMappingConfiguration.ColumnDefinition columnDefinition = tableDefinition.getColumns().get(columnName);
         return resolveConfiguredColumnValue(columnDefinition, csvRecord, preferredIdentifiers, false);
     }
@@ -1902,22 +1812,17 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (columnDefinition == null) {
             return "";
         }
-
         final String literal = emptyIfNull(columnDefinition.getLiteral()).trim();
         if (!literal.isBlank()) {
             return literal;
         }
-
         final String preferredValue = resolveValueFromIdentifiers(csvRecord, columnDefinition, preferredIdentifiers);
         if (!preferredValue.isBlank()) {
             return preferredValue;
         }
-
-        // If preferredIdentifiers is provided (even if empty) and we shouldn't fall back, return empty
         if (preferredIdentifiers != null && !fallbackToConfiguredIdentifiers) {
             return "";
         }
-
         return resolveValueFromIdentifiers(csvRecord, columnDefinition, columnDefinition.getIdentifiers());
     }
 
@@ -1960,16 +1865,13 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (trimmedIdentifier.isBlank()) {
             return "";
         }
-
         final String sourceValue = readCsvValueByIdentifier(csvRecord, trimmedIdentifier);
         if (!sourceValue.isBlank()) {
             return sourceValue;
         }
-
         if (isLiteralCandidate(trimmedIdentifier)) {
             return trimmedIdentifier;
         }
-
         return "";
     }
 
@@ -1979,7 +1881,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (normalizedIdentifier.isBlank()) {
             return "";
         }
-
         for (Map.Entry<String, String> entry : csvRecord.toMap().entrySet()) {
             if (!normalizedIdentifier.equals(normalizeValueKey(entry.getKey()))) {
                 continue;
@@ -1999,11 +1900,9 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (trimmedIdentifier.isBlank()) {
             return false;
         }
-
         if (trimmedIdentifier.toUpperCase(Locale.ROOT).startsWith("TPCR_") || trimmedIdentifier.contains("_")) {
             return false;
         }
-
         return trimmedIdentifier.equalsIgnoreCase("true")
                 || trimmedIdentifier.equalsIgnoreCase("false")
                 || trimmedIdentifier.contains("/")
@@ -2023,12 +1922,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (tableDefinition == null || tableDefinition.getColumns() == null) {
             return;
         }
-
         final TableMappingConfiguration.ColumnDefinition fieldKeyDefinition = tableDefinition.getColumns().get(ClientConstants.FIELD_KEY);
         if (fieldKeyDefinition == null || fieldKeyDefinition.getIdentifiers() == null) {
             return;
         }
-
         fieldKeyDefinition.getIdentifiers().stream()
                 .map(fieldKey -> fieldKey == null ? "" : fieldKey.trim())
                 .filter(trimmedFieldKey -> !trimmedFieldKey.isBlank())
@@ -2037,9 +1934,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                     if (fieldValue.isBlank()) {
                         return;
                     }
-
                     final String id = clientField ? String.valueOf(clientAddFldIdCounter++) : String.valueOf(claimantAddFldIdCounter++);
-
                     final Map<String, String> row = buildConfiguredDerivedRow(
                             logicalTableName,
                             csvRecord,
@@ -2050,13 +1945,11 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                                     ClientConstants.FIELD_KEY, trimmedFieldKey,
                                     ClientConstants.FIELD_VALUE, fieldValue
                             ));
-
                     addRowToConfiguredTable(tableData, logicalTableName, row);
                 });
     }
 
     private List<String> preferredAddressLineIdentifiers(final String roleCd) {
-
         if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd)) {
             return List.of("TPCR_NOMINEEADDRESSLINE1");
         }
@@ -2070,7 +1963,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private List<String> preferredContactIdentifiers(final String roleCd) {
-
         if (ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
             return List.of("TPCR_CLAIMANT_MOBNO");
         }
@@ -2084,7 +1976,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private List<String> preferredEmailIdentifiers(final String roleCd) {
-
         if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd)) {
             return List.of("TPCR_NOMINEEEMAILID");
         }
@@ -2101,7 +1992,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private List<String> preferredRelationshipIdentifiers(final String roleCd) {
-
         if (ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
             return List.of("TPCR_RELATIONOFCLAIMANT");
         }
@@ -2123,7 +2013,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (ClientConstants.ROLE_APPOINTEE.equalsIgnoreCase(roleCd) || ClientConstants.ROLE_GUARDIAN.equalsIgnoreCase(roleCd)) {
             return List.of(ClientConstants.CSV_COL_GUARDIAN_NAME);
         }
-        // For other roles: return empty list to force NULL (no fallback to YAML)
         return List.of();
     }
 
@@ -2159,7 +2048,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String resolvePersonOtherName(final String roleCd, final CSVRecord csvRecord) {
-
         return resolveConfiguredRoleBasedValue(
                 ClientConstants.PERSON_TABLE,
                 "otherName",
@@ -2168,7 +2056,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private List<String> preferredPersonOtherNameIdentifiers(final String roleCd) {
-
         if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd) || ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
             return List.of("TPCR_CORRECTNOMINEEFIRSTNAME");
         }
@@ -2218,7 +2105,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String resolveConfiguredOutputTableName(final String logicalTableName) {
-
         if (tableMappingConfiguration.getTables() == null) {
             return "";
         }
@@ -2232,7 +2118,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private boolean isParentGuidRefColumn(
             final TableDefinition tableDef,
             final TableMappingConfiguration.ColumnDefinition columnDef) {
-
         if (tableDef.getParent() == null || tableDef.getParentGuidRef() == null) {
             return false;
         }
@@ -2248,7 +2133,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private boolean isRootGuidRefColumn(
             final TableDefinition tableDef,
             final TableMappingConfiguration.ColumnDefinition columnDef) {
-
         if (tableDef.getRootGuidRef() == null) {
             return false;
         }
@@ -2268,7 +2152,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (currentTableGuid == null || tableDef.getGuidColumn() == null || columnDef == null || columnDef.getIdentifiers() == null) {
             return false;
         }
-
         return columnDef.getIdentifiers().stream()
                 .filter(Objects::nonNull)
                 .map(String::trim)
@@ -2285,7 +2168,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (tableDef.getGuidColumn() == null) {
             return null;
         }
-
         return guidContext.computeIfAbsent(tableName, ignored -> UUID.randomUUID().toString());
     }
 
@@ -2294,7 +2176,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (preparedGuid == null) {
             return;
         }
-
         final String current = guidContext.get(tableName);
         if (preparedGuid.equals(current)) {
             guidContext.remove(tableName);
@@ -2311,12 +2192,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (tableDef.getGuidColumn() == null) {
             return rowData;
         }
-
         final String guid = guidContext.computeIfAbsent(tableName, ignored -> UUID.randomUUID().toString());
         final Map<String, String> ordered = new LinkedHashMap<>();
         ordered.put(tableDef.getGuidColumn(), guid);
         ordered.putAll(rowData);
-
         log.debug("Generated GUID {} for table '{}'", guid, tableName);
         return ordered;
     }
@@ -2365,14 +2244,12 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (!"CLAIM_HISTORY".equalsIgnoreCase(outputTableName)) {
             return;
         }
-
         final String currentValue = emptyIfNull(rowData.get(ClientConstants.CLAIM_HISTORY_CAUSE_OF_DEATH_CD)).trim();
         if (ClientConstants.NATURAL.equalsIgnoreCase(currentValue)) {
             rowData.put(ClientConstants.CLAIM_HISTORY_CAUSE_OF_DEATH_CD, ClientConstants.NATURAL);
         } else if ("ACCIDENTAL".equalsIgnoreCase(currentValue)) {
             rowData.put(ClientConstants.CLAIM_HISTORY_CAUSE_OF_DEATH_CD, "UNNATURAL");
         }
-
         final String eventSubTypeValue = emptyIfNull(rowData.get(ClientConstants.CLAIM_HISTORY_EVENT_SUB_TYPE_CD)).trim();
         if ("NATURAL".equalsIgnoreCase(eventSubTypeValue)) {
             rowData.put(ClientConstants.CLAIM_HISTORY_EVENT_SUB_TYPE_CD, "NATURAL");
@@ -2389,7 +2266,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (!"CLAIM_HISTORY".equalsIgnoreCase(outputTableName)) {
             return;
         }
-
         final String decision = readCsvValueSafely(csvRecord, "TPCR_CLAIM_DECSN");
         if ("admit".equalsIgnoreCase(decision)) {
             rowData.put("stageCd", "PAID");
