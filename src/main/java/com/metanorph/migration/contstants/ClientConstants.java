@@ -72,4 +72,5 @@ public class ClientConstants {
     public static final String CLAIM_HISTORY = "CLAIM_HISTORY";
     public static final String CLIENT_GUID_TO = "clientGuidTo";
     public static final String NATURAL = "NATURAL";
+    public static final String CLIENT_NUM = "clientNum";
 }

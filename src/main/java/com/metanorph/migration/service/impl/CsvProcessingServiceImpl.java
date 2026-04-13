@@ -57,6 +57,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CsvProcessingServiceImpl implements CsvProcessingService {
 
+    private static final String CLIENT_NUM_TO_COL = "clientNumTo";
 
 
     private final TableMappingConfiguration tableMappingConfiguration;
@@ -171,9 +172,12 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         mapMasterPolicyNumToClaimHistoryClient(tableData);
         mapClaimHistoryClientCdToClientGuid(tableData);
         syncAdditionalRowClientRefGuidFromClientCd(tableData);
+        // Re-run mapping after clientRefGuid sync so additional rows also get GUID clientCd values.
+        mapClaimHistoryClientCdToClientGuid(tableData);
         remapDerivedClientReferencesToClientGuid(tableData);
         remapPaymentClientRefGuid(tableData);
         normalizeClientRelationshipGuidTo(tableData);
+        remapClientRelationshipClientNumToFromClient(tableData);
         log.info("Total CSV rows processed: {}", rowNumber);
         // Remove CLIENT_REF_GUID from CLIENT sheet headers and rows before writing
         Map<String, List<Map<String, String>>> filteredTableData = new LinkedHashMap<>(tableData);
@@ -399,26 +403,44 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             return;
         }
 
-        // Build clientRefGuid -> clientNum so that CLAIM_HISTORY_CLIENT.clientCd
-        // is populated from the CLIENT sheet's clientNum column.
-        final Map<String, String> clientNumByRef = new HashMap<>();
+        final Map<String, String> clientNumByLookupKey = buildClientNumLookup(clientRows);
+        applyMappedClientNumToClaimHistoryClients(claimHistoryClientRows, clientNumByLookupKey);
+    }
+
+    private Map<String, String> buildClientNumLookup(final List<Map<String, String>> clientRows) {
+
+        final Map<String, String> clientNumByLookupKey = new HashMap<>();
         for (Map<String, String> clientRow : clientRows) {
-            final String clientRefGuid = clientRow.get(ClientConstants.CLIENT_REF_GUID);
-            final String clientNum = clientRow.get("clientNum");
-            if (clientRefGuid != null && !clientRefGuid.isBlank() && clientNum != null && !clientNum.isBlank()) {
-                clientNumByRef.put(clientRefGuid, clientNum);
+            final String clientNum = clientRow.get(ClientConstants.CLIENT_NUM);
+            if (clientNum == null || clientNum.isBlank()) {
+                continue;
             }
+            putIfNonBlank(clientNumByLookupKey, clientRow.get(ClientConstants.CLIENT_REF_GUID), clientNum);
+            putIfNonBlank(clientNumByLookupKey, clientRow.get(ClientConstants.CLIENT_GUID), clientNum);
         }
+        return clientNumByLookupKey;
+    }
+
+    private void applyMappedClientNumToClaimHistoryClients(
+            final List<Map<String, String>> claimHistoryClientRows,
+            final Map<String, String> clientNumByLookupKey) {
 
         for (Map<String, String> claimHistoryClientRow : claimHistoryClientRows) {
             final String clientRefGuid = claimHistoryClientRow.get(ClientConstants.CLIENT_REF_GUID);
             if (clientRefGuid == null || clientRefGuid.isBlank()) {
                 continue;
             }
-            final String mappedClientNum = clientNumByRef.get(clientRefGuid);
+            final String mappedClientNum = clientNumByLookupKey.get(clientRefGuid);
             if (mappedClientNum != null && !mappedClientNum.isBlank()) {
                 claimHistoryClientRow.put(ClientConstants.CLIENT_CD, mappedClientNum);
             }
+        }
+    }
+
+    private void putIfNonBlank(final Map<String, String> target, final String key, final String value) {
+
+        if (key != null && !key.isBlank() && value != null && !value.isBlank()) {
+            target.put(key, value);
         }
     }
 
@@ -556,7 +578,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             if (clientGuid == null || clientGuid.isBlank()) {
                 clientGuid = UUID.randomUUID().toString();
             }
+            final String clientNumGuid = UUID.randomUUID().toString();
             rowData.put(ClientConstants.CLIENT_GUID, clientGuid);
+            // clientNum must be a GUID distinct from client_guid.
+            rowData.put(ClientConstants.CLIENT_NUM, clientNumGuid);
             rowData.put(ClientConstants.CLIENT_TYPE_CD, ClientConstants.PERSON_CLIENT_TYPE);
         }
     }
@@ -593,7 +618,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
         for (Map<String, String> row : relationshipRows) {
 
-            String clientNumTo = row.get("clientNumTo"); // use exact column name
+            String clientNumTo = row.get(CLIENT_NUM_TO_COL); // use exact column name
             String clientGuidTo = row.get(ClientConstants.CLIENT_GUID_TO);
 
             if (clientNumTo == null || clientNumTo.isBlank()) {
@@ -607,7 +632,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         // apply to all rows
         for (Map<String, String> row : relationshipRows) {
 
-            String clientNumTo = row.get("clientNumTo");
+            String clientNumTo = row.get(CLIENT_NUM_TO_COL);
 
             if (clientNumTo == null || clientNumTo.isBlank()) {
                 continue;
@@ -619,6 +644,59 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 row.put("clientGuidTo", correctGuidTo);
             }
         }
+    }
+
+    private void remapClientRelationshipClientNumToFromClient(
+            final Map<String, List<Map<String, String>>> tableData) {
+
+        final List<Map<String, String>> relationshipRows =
+                getConfiguredRows(tableData, ClientConstants.CLIENT_RELATIONSHIP_TABLE);
+        final List<Map<String, String>> clientRows =
+                getConfiguredRows(tableData, ClientConstants.CLIENT_TABLE);
+
+        if (relationshipRows == null || relationshipRows.isEmpty()
+                || clientRows == null || clientRows.isEmpty()) {
+            return;
+        }
+
+        final Map<String, String> clientNumByGuid = buildClientNumByGuid(clientRows);
+        applyClientNumToRelationshipRows(relationshipRows, clientNumByGuid);
+    }
+
+    private Map<String, String> buildClientNumByGuid(final List<Map<String, String>> clientRows) {
+
+        final Map<String, String> clientNumByGuid = new HashMap<>();
+        for (Map<String, String> clientRow : clientRows) {
+            putIfNonBlank(clientNumByGuid,
+                    clientRow.get(ClientConstants.CLIENT_GUID),
+                    clientRow.get(ClientConstants.CLIENT_NUM));
+        }
+        return clientNumByGuid;
+    }
+
+    private void applyClientNumToRelationshipRows(
+            final List<Map<String, String>> relationshipRows,
+            final Map<String, String> clientNumByGuid) {
+
+        for (Map<String, String> relationshipRow : relationshipRows) {
+            final String lookupGuid = resolveRelationshipLookupGuid(relationshipRow);
+            if (lookupGuid == null || lookupGuid.isBlank()) {
+                continue;
+            }
+            final String mappedClientNum = clientNumByGuid.get(lookupGuid);
+            if (mappedClientNum != null && !mappedClientNum.isBlank()) {
+                relationshipRow.put(CLIENT_NUM_TO_COL, mappedClientNum);
+            }
+        }
+    }
+
+    private String resolveRelationshipLookupGuid(final Map<String, String> relationshipRow) {
+
+        final String clientGuidTo = relationshipRow.get(ClientConstants.CLIENT_GUID_TO);
+        if (clientGuidTo != null && !clientGuidTo.isBlank()) {
+            return clientGuidTo;
+        }
+        return relationshipRow.get(ClientConstants.CLIENT_GUID_LINK);
     }
 
     private void assignAutoIncrementIdentifiers(
@@ -751,7 +829,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
         final Map<String, String> row = new LinkedHashMap<>();
         row.put(ClientConstants.ID, String.valueOf(nextClientId()));
-        row.put(ClientConstants.CLIENT_GUID, UUID.randomUUID().toString());
+        final String clientGuid = UUID.randomUUID().toString();
+        final String clientNumGuid = UUID.randomUUID().toString();
+        row.put(ClientConstants.CLIENT_GUID, clientGuid);
+        row.put(ClientConstants.CLIENT_NUM, clientNumGuid);
         row.put(ClientConstants.CLIENT_TYPE_CD, ClientConstants.PERSON_CLIENT_TYPE);
         row.put(ClientConstants.CLIENT_REF_GUID, resolveClientRefGuid(guidContext));
         return row;
