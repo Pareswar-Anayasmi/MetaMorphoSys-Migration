@@ -658,8 +658,9 @@ table-mapping:
 
         firstName:
           identifiers:
-            - TPCR_NOMINEEFIRSTNAME
             - TPCR_CLAIMANT_NAME
+            - TPCR_NOMINEEFIRSTNAME
+            - TPCR_BENEF_NAME
             - TPCR_NAMEOFGUARDIAN
 
         genderCd:
@@ -681,6 +682,7 @@ table-mapping:
         otherName:
           identifiers:
             - TPCR_CORRECTNOMINEEFIRSTNAME
+            - TPCR_NAMEOFGUARDIAN
 
         insuredType:
           identifiers:

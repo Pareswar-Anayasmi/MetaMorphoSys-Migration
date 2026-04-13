@@ -1206,12 +1206,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         final String roleCd = claimHistoryClientRow.get(ClientConstants.ROLE_CD);
         final String firstName = resolvePersonFirstName(roleCd, csvRecord);
 
-        if (firstName.isBlank()) {
-            return "";
-        }
-
         String personGuid = UUID.randomUUID().toString();
-        String rawAge = readCsvValueSafely(csvRecord, "TPCR_NOM_AGE");
+        String rawAge = resolvePersonAge(roleCd, csvRecord);
         String cleanedAge = extractYearsOnly(rawAge);
         final Map<String, String> personRow = buildConfiguredDerivedRow(
                 ClientConstants.PERSON_TABLE,
@@ -1223,7 +1219,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                         "firstName", firstName,
                         "genderCd", resolvePersonGender(roleCd, csvRecord),
                         "dateOfBirth", resolvePersonDateOfBirth(roleCd, csvRecord),
-                        "age", cleanedAge
+                        "age", cleanedAge,
+                        "otherName", resolvePersonOtherName(roleCd, csvRecord)
                 ));
 
         addRowToConfiguredTable(tableData, ClientConstants.PERSON_TABLE, personRow);
@@ -1287,6 +1284,17 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 "dateOfBirth",
                 csvRecord,
                 preferredPersonDateOfBirthIdentifiers(roleCd));
+    }
+
+    private String resolvePersonAge(final String roleCd, final CSVRecord csvRecord) {
+
+        if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd)
+                || ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
+            // Age only for Nominee/Claimant
+            return readCsvValueSafely(csvRecord, "TPCR_NOM_AGE");
+        }
+        // For all other roles: return empty (no age)
+        return "";
     }
 
     private String resolveEmailId(final String roleCd, final CSVRecord csvRecord) {
@@ -1728,7 +1736,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             return preferredValue;
         }
 
-        if (preferredIdentifiers != null && !preferredIdentifiers.isEmpty() && !fallbackToConfiguredIdentifiers) {
+        // If preferredIdentifiers is provided (even if empty) and we shouldn't fall back, return empty
+        if (preferredIdentifiers != null && !fallbackToConfiguredIdentifiers) {
             return "";
         }
 
@@ -1929,38 +1938,67 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private List<String> preferredPersonFirstNameIdentifiers(final String roleCd) {
 
-        if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd)) {
-            return List.of("TPCR_NOMINEEFIRSTNAME");
-        }
-        if (ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
-            return List.of(ClientConstants.CSV_COL_CLAIMANT_NAME);
+        if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd)
+                || ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
+            // cascade: TPCR_CLAIMANT_NAME → TPCR_NOMINEEFIRSTNAME → TPCR_BENEF_NAME
+            return List.of(ClientConstants.CSV_COL_CLAIMANT_NAME, "TPCR_NOMINEEFIRSTNAME", "TPCR_BENEF_NAME");
         }
         if (ClientConstants.ROLE_APPOINTEE.equalsIgnoreCase(roleCd) || ClientConstants.ROLE_GUARDIAN.equalsIgnoreCase(roleCd)) {
             return List.of(ClientConstants.CSV_COL_GUARDIAN_NAME);
         }
-        return List.of("TPCR_BENEF_NAME");
+        // For INSURED and others: return empty list to force NULL (no fallback to YAML)
+        return List.of();
     }
 
     private List<String> preferredPersonGenderIdentifiers(final String roleCd) {
 
-        if (ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
-            return List.of(ClientConstants.CSV_COL_CLAIMANT_GENDER);
+        if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd)
+                || ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
+            // cascade: TPCR_CLAIMANTGENDER → TPCR_NOMINEEGENDER → TPCR_GENDER
+            return List.of(ClientConstants.CSV_COL_CLAIMANT_GENDER, ClientConstants.CSV_COL_NOMINEE_GENDER, ClientConstants.CSV_COL_GENDER);
         }
-        if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd)) {
-            return List.of(ClientConstants.CSV_COL_NOMINEE_GENDER);
+        if (ClientConstants.ROLE_APPOINTEE.equalsIgnoreCase(roleCd) || ClientConstants.ROLE_GUARDIAN.equalsIgnoreCase(roleCd)) {
+            return List.of(ClientConstants.CSV_COL_GENDER);
         }
-        return List.of(ClientConstants.CSV_COL_GENDER);
+        // For INSURED and others: return empty list to force NULL (no fallback to YAML)
+        return List.of();
     }
 
     private List<String> preferredPersonDateOfBirthIdentifiers(final String roleCd) {
 
-        if (ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
-            return List.of(ClientConstants.CSV_COL_CLAIMANT_DOB);
+        if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd)
+                || ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
+            // cascade: TPCR_CLAIMANT_DOB → TPCR_NOM_DOB
+            return List.of(ClientConstants.CSV_COL_CLAIMANT_DOB, ClientConstants.CSV_COL_NOM_DOB);
         }
-        if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd)) {
-            return List.of(ClientConstants.CSV_COL_NOM_DOB);
+        if (ClientConstants.ROLE_APPOINTEE.equalsIgnoreCase(roleCd) || ClientConstants.ROLE_GUARDIAN.equalsIgnoreCase(roleCd)
+                || ClientConstants.INSURED.equalsIgnoreCase(roleCd)) {
+            // For APPOINTEE, GUARDIAN, and INSURED: use TPCR_DOB_DECEASED
+            return List.of(ClientConstants.CSV_COL_DOB_DECEASED);
         }
-        return List.of(ClientConstants.CSV_COL_DOB_DECEASED);
+        // For all other roles: return empty list to force NULL (no fallback to YAML)
+        return List.of();
+    }
+
+    private String resolvePersonOtherName(final String roleCd, final CSVRecord csvRecord) {
+
+        return resolveConfiguredRoleBasedValue(
+                ClientConstants.PERSON_TABLE,
+                "otherName",
+                csvRecord,
+                preferredPersonOtherNameIdentifiers(roleCd));
+    }
+
+    private List<String> preferredPersonOtherNameIdentifiers(final String roleCd) {
+
+        if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd)
+                || ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
+            return List.of("TPCR_CORRECTNOMINEEFIRSTNAME");
+        }
+        if (ClientConstants.ROLE_APPOINTEE.equalsIgnoreCase(roleCd) || ClientConstants.ROLE_GUARDIAN.equalsIgnoreCase(roleCd)) {
+            return List.of(ClientConstants.CSV_COL_GUARDIAN_NAME);
+        }
+        return List.of();
     }
 
 
