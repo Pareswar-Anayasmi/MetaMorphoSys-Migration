@@ -22,6 +22,7 @@ public class ClientConstants {
     public static final String CLIENT_GUID_LINK = "clientGuid";
     public static final String CLAIM_GUID_LINK = "claimGuid";
     public static final String PERSON_CLIENT_TYPE = "PERSON";
+    public static final String INSURED = "INSURED";
     public static final String CLAIM_HISTORY_CLIENT_TABLE = "CLAIM_HISTORY_CLIENT";
     public static final String CLIENT_ADDRESS_TABLE = "CLIENT_ADDRESS";
     public static final String CLIENT_PHONE_TABLE = "CLIENT_PHONE";
@@ -68,4 +69,6 @@ public class ClientConstants {
     public static final String FIELD_VALUE = "fieldValue";
     public static final String CLAIM_HISTORY_CAUSE_OF_DEATH_CD = "causeOfDeathCd";
     public static final String CLAIM_HISTORY_EVENT_SUB_TYPE_CD = "eventSubTypeCd";
+    public static final String CLAIM_HISTORY = "CLAIM_HISTORY";
+    public static final String CLIENT_GUID_TO = "clientGuidTo";
 }
