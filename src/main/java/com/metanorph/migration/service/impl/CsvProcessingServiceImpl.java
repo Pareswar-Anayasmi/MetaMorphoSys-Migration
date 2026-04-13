@@ -171,6 +171,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         mapMasterPolicyNumToClaimHistoryClient(tableData);
         mapClaimHistoryClientCdToClientGuid(tableData);
         remapDerivedClientReferencesToClientGuid(tableData);
+        remapPaymentClientRefGuid(tableData);
         normalizeClientRelationshipGuidTo(tableData);
         log.info("Total CSV rows processed: {}", rowNumber);
         // Remove CLIENT_REF_GUID from CLIENT sheet headers and rows before writing
@@ -187,6 +188,38 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             clientHeaders.remove(ClientConstants.CLIENT_REF_GUID);
         }
         return ExcelWriterUtil.write(filteredTableData, headersBySheet);
+    }
+
+    private void remapPaymentClientRefGuid(Map<String, List<Map<String, String>>> tableData) {
+
+        List<Map<String, String>> paymentRows =
+                getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE);
+
+        List<Map<String, String>> clientRows =
+                getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY_CLIENT_TABLE);
+
+        if (paymentRows == null || clientRows == null) return;
+
+        // Map old → new
+        Map<String, String> mapping = new HashMap<>();
+
+        for (Map<String, String> row : clientRows) {
+            String clientCd = row.get(ClientConstants.CLIENT_CD);
+            String clientRefGuid = row.get(ClientConstants.CLIENT_REF_GUID);
+
+            if (clientCd != null && clientRefGuid != null) {
+                mapping.put(clientCd, clientRefGuid);
+            }
+        }
+
+        // Apply to payment
+        for (Map<String, String> row : paymentRows) {
+            String old = row.get("clientRefGuid");
+
+            if (mapping.containsKey(old)) {
+                row.put("clientRefGuid", mapping.get(old));
+            }
+        }
     }
 
     private void resetIdCounters() {
@@ -293,7 +326,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 // set clientCd = clientGuid
                 claimHistoryClientRow.put(ClientConstants.CLIENT_CD, mappedClientGuid);
 
-                claimHistoryClientRow.put(ClientConstants.CLIENT_REF_GUID, mappedClientGuid);
+//                claimHistoryClientRow.put(ClientConstants.CLIENT_REF_GUID, mappedClientGuid);
                 // 🔥 IMPORTANT: also set clientRefGuid = clientGuid
 //                claimHistoryClientRow.put(ClientConstants.CLIENT_REF_GUID, mappedClientGuid);
 //                claimHistoryClientRow.put(ClientConstants.CLIENT_CD, mappedClientGuid);
@@ -384,6 +417,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
         if (isClaimHistoryClientTable) {
             rowData.put(ClientConstants.ROLE_CD, "Insured");
+            guidContext.put("INSURED_CLIENT_REF_GUID", rowData.get(ClientConstants.CLIENT_REF_GUID));
+
             rowData.put("relatedToInsuredCd",
                     resolveRelatedToInsuredCd(rowData.get(ClientConstants.ROLE_CD), csvRecord));
             guidContext.put(ClientConstants.CLAIM_HISTORY_CLIENT_REF_PRIMARY, rowData.get(ClientConstants.CLIENT_REF_GUID));
@@ -430,7 +465,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             appendClaimantAddFldRows(tableData, rowData, csvRecord);
             final String personGuid = appendPersonRow(tableData, rowData, csvRecord);
             appendPersonIdentityRows(tableData, personGuid, csvRecord);
-            appendClaimHistoryPaymentRow(tableData, rowData, csvRecord);
+            appendClaimHistoryPaymentRow(tableData, rowData, csvRecord,guidContext);
         }
 
         if (isClientTable || isClaimHistoryClientTable) {
@@ -544,7 +579,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 appendClaimantAddFldRows(tableData, additionalClaimHistoryClientRow, csvRecord);
                 final String personGuid = appendPersonRow(tableData, additionalClaimHistoryClientRow, csvRecord);
                 appendPersonIdentityRows(tableData, personGuid, csvRecord);
-                appendClaimHistoryPaymentRow(tableData, additionalClaimHistoryClientRow, csvRecord);
+                appendClaimHistoryPaymentRow(tableData, additionalClaimHistoryClientRow, csvRecord, guidContext);
             }
             return;
         }
@@ -672,7 +707,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private void appendClaimHistoryPaymentRow(
             final Map<String, List<Map<String, String>>> tableData,
             final Map<String, String> claimHistoryClientRow,
-            final CSVRecord csvRecord) {
+            final CSVRecord csvRecord,
+            final Map<String, String> guidContext) {
 
 //        final String roleCd = claimHistoryClientRow.get(ClientConstants.ROLE_CD);
         String roleCd = claimHistoryClientRow.get(ClientConstants.ROLE_CD);
@@ -683,16 +719,19 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             return; // ❌ skip INSURED / APPOINTEE
         }
 
+        String claimHistoryRefGuid =
+                claimHistoryClientRow.get(ClientConstants.CLAIM_HISTORY_REF_GUID);
+
         final String accountNumber = resolveAccountNumber(roleCd, csvRecord);
         if (accountNumber.isBlank()) {
             return;
         }
 
         String clientRefGuid = claimHistoryClientRow.get(ClientConstants.CLIENT_REF_GUID);
-
-        if (clientRefGuid == null || clientRefGuid.isBlank()) {
-            return; // skip if missing
-        }
+//
+//        if (clientRefGuid == null || clientRefGuid.isBlank()) {
+//            return; // skip if missing
+//        }
 
         final Map<String, String> row = buildConfiguredDerivedRow(
                 ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE,
@@ -701,6 +740,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                         ClientConstants.ID, String.valueOf(claimHistoryPaymentIdCounter++),
                         "claimHistoryPaymentGuid", UUID.randomUUID().toString(),
                         "clientRefGuid", clientRefGuid,
+                        "claim_history_ref_guid", claimHistoryRefGuid,
                         "accountNumber", accountNumber,
                         "bankName", resolveBankName(roleCd, csvRecord),
                         "branchIdNum1", resolveIfsc(roleCd, csvRecord),
