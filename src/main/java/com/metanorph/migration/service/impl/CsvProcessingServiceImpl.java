@@ -62,21 +62,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private final TableMappingConfiguration tableMappingConfiguration;
     private final DbSourceProperties dbSourceProperties;
-    private long clientIdCounter = 1;
-    private long claimHistoryClientIdCounter = 1;
-    private long clientAddressIdCounter = 1;
-    private long clientPhoneIdCounter = 1;
-    private long clientEmailIdCounter = 1;
-    private long clientRelationshipIdCounter = 1;
-    private long clientAddFldIdCounter = 1;
-    private long claimantAddFldIdCounter = 1;
-    private long personIdCounter = 1;
-    private long claimHistoryPaymentIdCounter = 1;
-    private long personIdentityIdCounter = 1;
-    private long claimHistoryCoverageIdCounter = 1;
-    private long claimHistoryCoverageBenefitIdCounter = 1;
-    private long claimHistoryIdCounter = 1;
-    private long claimHistoryPolicyIdCounter = 1;
+    private long clientNumCounter = 1;
 
     /**
      * Processes uploaded file (CSV/Excel) and converts it into Excel output.
@@ -152,13 +138,9 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     public Workbook processCsv(final Reader reader) {
 
         log.info("Starting CSV processing");
-        resetIdCounters();
-
         final Map<String, List<Map<String, String>>> tableData = initializeTableStructure();
         int rowNumber = 0;
-
         try (CSVParser csvParser = createCsvParser(reader)) {
-
             for (CSVRecord csvRecord : csvParser) {
                 rowNumber++;
                 log.debug("Processing CSV row {}", rowNumber);
@@ -167,18 +149,17 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         } catch (IOException ex) {
             throw new IllegalStateException("CSV parsing failed. Please verify the file format.", ex);
         }
-
+        clientNumCounter = 1;
         mapMasterPolicyNumToClaimHistoryClient(tableData);
         mapClaimHistoryClientCdToClientGuid(tableData);
         syncAdditionalRowClientRefGuidFromClientCd(tableData);
-        // Re-run mapping after clientRefGuid sync so additional rows also get GUID clientCd values.
         mapClaimHistoryClientCdToClientGuid(tableData);
         remapDerivedClientReferencesToClientGuid(tableData);
         remapPaymentClientRefGuid(tableData);
         normalizeClientRelationshipGuidTo(tableData);
         remapClientRelationshipClientNumToFromClient(tableData);
-        normalizeClaimHistoryPolicyCommencementDt(tableData);
         normalizeClaimAdditionalFieldPaymentDate(tableData);
+        normalizeClaimHistoryDates(tableData);
         log.info("Total CSV rows processed: {}", rowNumber);
         // Remove CLIENT_REF_GUID from CLIENT sheet headers and rows before writing
         Map<String, List<Map<String, String>>> filteredTableData = new LinkedHashMap<>(tableData);
@@ -199,49 +180,24 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private void remapPaymentClientRefGuid(Map<String, List<Map<String, String>>> tableData) {
 
         List<Map<String, String>> paymentRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE);
-
         List<Map<String, String>> clientRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY_CLIENT_TABLE);
-
         if (paymentRows == null || clientRows == null) return;
-
         // Map old → new
         Map<String, String> mapping = new HashMap<>();
-
         for (Map<String, String> row : clientRows) {
             String clientCd = row.get(ClientConstants.CLIENT_CD);
             String clientRefGuid = row.get(ClientConstants.CLIENT_REF_GUID);
-
             if (clientCd != null && clientRefGuid != null) {
                 mapping.put(clientCd, clientRefGuid);
             }
         }
 
-        // Apply to payment
         for (Map<String, String> row : paymentRows) {
             String old = row.get(ClientConstants.CLIENT_REF_GUID);
-
             if (mapping.containsKey(old)) {
                 row.put("clientRefGuid", mapping.get(old));
             }
         }
-    }
-
-    private void resetIdCounters() {
-        clientIdCounter = 1;
-        claimHistoryClientIdCounter = 1;
-        clientAddressIdCounter = 1;
-        clientPhoneIdCounter = 1;
-        clientEmailIdCounter = 1;
-        clientRelationshipIdCounter = 1;
-        clientAddFldIdCounter = 1;
-        claimantAddFldIdCounter = 1;
-        personIdCounter = 1;
-        claimHistoryPaymentIdCounter = 1;
-        personIdentityIdCounter = 1;
-        claimHistoryCoverageIdCounter = 1;
-        claimHistoryCoverageBenefitIdCounter = 1;
-        claimHistoryIdCounter = 1;
-        claimHistoryPolicyIdCounter = 1;
     }
 
     private void mapMasterPolicyNumToClaimHistoryClient(final Map<String, List<Map<String, String>>> tableData) {
@@ -251,7 +207,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (claimHistoryPolicyRows == null || claimHistoryPolicyRows.isEmpty() || claimHistoryClientRows == null || claimHistoryClientRows.isEmpty()) {
             return;
         }
-
         final Map<String, String> policyNumByClaimHistoryRefGuid = new HashMap<>();
         for (Map<String, String> policyRow : claimHistoryPolicyRows) {
             final String claimHistoryRefGuid = policyRow.get(ClientConstants.CLAIM_HISTORY_REF_GUID_COL);
@@ -260,7 +215,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 policyNumByClaimHistoryRefGuid.putIfAbsent(claimHistoryRefGuid, policyNum);
             }
         }
-
         for (Map<String, String> clientRow : claimHistoryClientRows) {
             final String claimHistoryRefGuid = clientRow.get(ClientConstants.CLAIM_HISTORY_REF_GUID);
             if (claimHistoryRefGuid == null || claimHistoryRefGuid.isBlank()) {
@@ -285,17 +239,14 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (claimHistoryClientRows == null || claimHistoryClientRows.isEmpty()) {
             return;
         }
-
         final Map<String, String> clientGuidByOldRef = buildClientGuidByOldRef(tableData);
 
         // For each additional row capture old random UUID → correct client_guid,
         // then overwrite clientRefGuid with the proper GUID.
         final Map<String, String> oldToNewClientRefGuid = new HashMap<>();
-
         for (Map<String, String> row : claimHistoryClientRows) {
             updateAdditionalRowClientRefGuid(row, clientGuidByOldRef, oldToNewClientRefGuid);
         }
-
         applyOldToNewClientRefGuidToPayments(tableData, oldToNewClientRefGuid);
     }
 
@@ -321,18 +272,13 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final Map<String, String> clientGuidByOldRef,
             final Map<String, String> oldToNewClientRefGuid) {
 
-        final String roleCd = row.get(ClientConstants.ROLE_CD);
         final String oldClientRefGuid = row.get(ClientConstants.CLIENT_REF_GUID);
-        if (ClientConstants.INSURED.equalsIgnoreCase(roleCd) || oldClientRefGuid == null || oldClientRefGuid.isBlank()) {
+        if (oldClientRefGuid == null || oldClientRefGuid.isBlank()) {
             return;
         }
-
         String newClientRefGuid = clientGuidByOldRef.get(oldClientRefGuid);
         if (newClientRefGuid == null || newClientRefGuid.isBlank()) {
-            newClientRefGuid = row.get(ClientConstants.CLIENT_CD);
-        }
-        if (newClientRefGuid == null || newClientRefGuid.isBlank()) {
-            return;
+            return; // DO NOT FALLBACK TO clientCd
         }
         if (!newClientRefGuid.equals(oldClientRefGuid)) {
             oldToNewClientRefGuid.put(oldClientRefGuid, newClientRefGuid);
@@ -367,7 +313,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (clientRows == null || clientRows.isEmpty()) {
             return;
         }
-
         for (Map<String, String> clientRow : clientRows) {
             final String clientRefGuid = clientRow.get(ClientConstants.CLIENT_REF_GUID);
             final String clientGuid = clientRow.get(ClientConstants.CLIENT_GUID);
@@ -375,7 +320,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 clientGuidByRef.put(clientRefGuid, clientGuid);
             }
         }
-
         remapClientReferenceColumn(tableData, ClientConstants.CLIENT_ADDRESS_TABLE, clientGuidByRef);
         remapClientReferenceColumn(tableData, ClientConstants.CLIENT_PHONE_TABLE, clientGuidByRef);
         remapClientReferenceColumn(tableData, ClientConstants.CLIENT_EMAIL_TABLE, clientGuidByRef);
@@ -392,7 +336,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (clientRows == null || clientRows.isEmpty() || claimHistoryClientRows == null || claimHistoryClientRows.isEmpty()) {
             return;
         }
-
         final Map<String, String> clientNumByLookupKey = buildClientNumLookup(clientRows);
         applyMappedClientNumToClaimHistoryClients(claimHistoryClientRows, clientNumByLookupKey);
     }
@@ -452,7 +395,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             if (currentClientRefGuid == null || currentClientRefGuid.isBlank()) {
                 continue;
             }
-
             final String mappedClientGuid = clientGuidByRef.get(currentClientRefGuid);
             if (mappedClientGuid != null && !mappedClientGuid.isBlank()) {
                 row.put(ClientConstants.CLIENT_GUID_LINK, mappedClientGuid);
@@ -460,7 +402,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 // Keep the original value, but under the new column name.
                 row.put(ClientConstants.CLIENT_GUID_LINK, currentClientRefGuid);
             }
-
             row.remove(ClientConstants.CLIENT_REF_GUID);
         }
     }
@@ -472,7 +413,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private void processSingleRecord(final CSVRecord csvRecord, final Map<String, List<Map<String, String>>> tableData) {
 
         final Map<String, String> guidContext = new HashMap<>();
-
         tableMappingConfiguration.getTables().forEach((tableName, tableDef) ->
                 processTable(tableName, tableDef, csvRecord, tableData, guidContext));
     }
@@ -489,7 +429,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (isDerivedRowTable(tableName)) {
             return;
         }
-
         final String currentTableGuid = prepareGuidForTable(tableName, tableDef, guidContext);
         Map<String, String> rowData = buildRowData(csvRecord, tableDef, currentTableGuid, guidContext);
 
@@ -497,36 +436,26 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             log.debug("Row skipped for table '{}' - parent GUID missing", tableName);
             return;
         }
-
         if (shouldSkipRow(rowData, tableDef)) {
             log.debug("Skipping empty row for table '{}'", tableName);
             discardPreparedGuidIfUnused(tableName, currentTableGuid, guidContext);
             return;
         }
-
         rowData = assignGuidIfRequired(tableName, tableDef, rowData, guidContext);
-
         final boolean isClientTable = ClientConstants.CLIENT_TABLE.equalsIgnoreCase(outputTableName);
         final boolean isClaimHistoryClientTable = ClientConstants.CLAIM_HISTORY_CLIENT_TABLE.equalsIgnoreCase(outputTableName);
         initializeClientScopedRow(rowData, csvRecord, guidContext, isClientTable, isClaimHistoryClientTable);
-
         normalizeClaimHistoryCauseOfDeathCd(outputTableName, rowData);
-
         normalizeClaimHistoryStageAndStatusCd(outputTableName, rowData, csvRecord);
-
         if (shouldSkipCoverageOrBenefitRow(outputTableName, rowData)) {
             log.debug("Skipping row for table '{}' due to missing required business column", outputTableName);
             discardPreparedGuidIfUnused(tableName, currentTableGuid, guidContext);
             return;
         }
-
-        assignCoverageIdentifierIfRequired(outputTableName, rowData);
-
         tableData.get(outputTableName).add(rowData);
         if (isClaimHistoryClientTable) {
             appendClaimHistoryClientDerivedRows(tableData, rowData, csvRecord);
         }
-
         if (isClientTable || isClaimHistoryClientTable) {
             if (isClientTable) {
                 appendClientRelationshipRow(tableData, rowData, csvRecord, guidContext);
@@ -545,19 +474,20 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (!isClientTable && !isClaimHistoryClientTable) {
             return;
         }
-        assignAutoIncrementIdentifiers(rowData, isClaimHistoryClientTable);
 
         if (isClaimHistoryClientTable) {
-            rowData.put(ClientConstants.ROLE_CD, ClientConstants.INSURED);
-            guidContext.put("INSURED_CLIENT_REF_GUID", rowData.get(ClientConstants.CLIENT_REF_GUID));
-            rowData.put("relatedToInsuredCd", resolveRelatedToInsuredCd(rowData.get(ClientConstants.ROLE_CD), csvRecord));
-            guidContext.put(ClientConstants.CLAIM_HISTORY_CLIENT_REF_PRIMARY, rowData.get(ClientConstants.CLIENT_REF_GUID));
-            registerRelationshipCd(guidContext, rowData.get(ClientConstants.CLIENT_REF_GUID), rowData.get(ClientConstants.ROLE_CD), csvRecord);
 
-            final String clientGuid = guidContext.get("CLIENT_GUID_COMMON");
-            if (clientGuid != null) {
-                rowData.put(ClientConstants.CLIENT_REF_GUID, clientGuid);
+            rowData.put(ClientConstants.ROLE_CD, ClientConstants.INSURED);
+            String clientRefGuid = rowData.get(ClientConstants.CLIENT_REF_GUID);
+
+            if (clientRefGuid == null || clientRefGuid.isBlank()) {
+                clientRefGuid = UUID.randomUUID().toString();
+                rowData.put(ClientConstants.CLIENT_REF_GUID, clientRefGuid);
             }
+            guidContext.put(ClientConstants.CLAIM_HISTORY_CLIENT_REF_PRIMARY, clientRefGuid);
+            guidContext.put("INSURED_CLIENT_REF_GUID", clientRefGuid);
+            rowData.put("relatedToInsuredCd", resolveRelatedToInsuredCd(rowData.get(ClientConstants.ROLE_CD), csvRecord));
+            registerRelationshipCd(guidContext, clientRefGuid, rowData.get(ClientConstants.ROLE_CD), csvRecord);
         }
 
         if (isClientTable) {
@@ -565,7 +495,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             if (clientGuid == null || clientGuid.isBlank()) {
                 clientGuid = UUID.randomUUID().toString();
             }
-            final String clientNumGuid = UUID.randomUUID().toString();
+            final String clientNumGuid = "CL-" + clientNumCounter++;
             rowData.put(ClientConstants.CLIENT_GUID, clientGuid);
             // clientNum must be a GUID distinct from client_guid.
             rowData.put(ClientConstants.CLIENT_NUM, clientNumGuid);
@@ -589,14 +519,12 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         appendClaimHistoryPaymentRow(tableData, rowData, csvRecord);
     }
 
-
     private void normalizeClientRelationshipGuidTo(final Map<String, List<Map<String, String>>> tableData) {
 
         final List<Map<String, String>> relationshipRows = getConfiguredRows(tableData, ClientConstants.CLIENT_RELATIONSHIP_TABLE);
         if (relationshipRows == null || relationshipRows.isEmpty()) {
             return;
         }
-
         // Map<clientNumTo, firstClientGuidTo>
         final Map<String, String> firstGuidByClientNumTo = new HashMap<>();
         for (Map<String, String> row : relationshipRows) {
@@ -669,47 +597,74 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         return relationshipRow.get(ClientConstants.CLIENT_GUID_LINK);
     }
 
-    private void normalizeClaimHistoryPolicyCommencementDt(final Map<String, List<Map<String, String>>> tableData) {
-
-        final List<Map<String, String>> policyRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY_POLICY_TABLE);
-        if (policyRows == null || policyRows.isEmpty()) {
-            return;
-        }
-
-        for (Map<String, String> policyRow : policyRows) {
-            final String currentValue = emptyIfNull(policyRow.get("commencementDt")).trim();
-            final String normalized = normalizeDateToDayMonthYear(currentValue);
-            if (!normalized.isBlank()) {
-                policyRow.put("commencementDt", normalized);
-            }
-        }
-    }
-
     private String normalizeDateToDayMonthYear(final String rawValue) {
 
         if (rawValue == null || rawValue.isBlank()) {
             return "";
         }
-        // If already dash-formatted (example: 01-06-2015), keep as-is.
-        if (rawValue.contains("-")) {
-            return rawValue;
-        }
-
-        final DateTimeFormatter output = DateTimeFormatter.ofPattern("dd-MM-yyyy");
-        final DateTimeFormatter[] inputFormats = new DateTimeFormatter[] {
+        String cleaned = rawValue.trim();
+        List<DateTimeFormatter> inputFormats = List.of(
+                DateTimeFormatter.ofPattern("dd-MM-yyyy"),
+                DateTimeFormatter.ofPattern("d-M-yyyy"),
+                DateTimeFormatter.ofPattern("d/M/yyyy"),
+                DateTimeFormatter.ofPattern("dd/MM/yyyy"),
                 DateTimeFormatter.ofPattern("M/d/yy"),
-                DateTimeFormatter.ofPattern("M/d/yyyy")
-        };
+                DateTimeFormatter.ofPattern("MM/dd/yy"),
+                DateTimeFormatter.ofPattern("M/d/yyyy"),
+                DateTimeFormatter.ofPattern("MM/dd/yyyy"),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd"),
+                DateTimeFormatter.ofPattern("yyyy/MM/dd")
+        );
 
-        for (DateTimeFormatter input : inputFormats) {
+        for (DateTimeFormatter formatter : inputFormats) {
             try {
-                final LocalDate parsed = LocalDate.parse(rawValue, input);
-                return parsed.format(output);
+                LocalDate date = LocalDate.parse(cleaned, formatter);
+                return date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
             } catch (DateTimeParseException ignored) {
-                // try next pattern
+                //
             }
         }
-        return rawValue;
+
+        return cleaned;
+    }
+
+    private void normalizeClaimHistoryDates(Map<String, List<Map<String, String>>> tableData) {
+
+        // CLAIM_HISTORY
+        List<Map<String, String>> claimRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY);
+
+        if (claimRows != null) {
+            for (Map<String, String> row : claimRows) {
+                row.put("eventDt", normalizeDateToDayMonthYear(row.get("eventDt")));
+                row.put("intimationDt", normalizeDateToDayMonthYear(row.get("intimationDt")));
+                row.put("accidentDt", normalizeDateToDayMonthYear(row.get("accidentDt")));
+                row.put("accidentDts", normalizeDateToDayMonthYear(row.get("accidentDts")));
+                row.put("adjReasonCd", trimTo255(row.get("adjReasonCd")));
+                row.put("adjRemarks", trimTo255(row.get("adjRemarks")));
+            }
+        }
+        // PERSON (ADD THIS BLOCK)
+        List<Map<String, String>> personRows = getConfiguredRows(tableData, ClientConstants.PERSON_TABLE);
+
+        if (personRows != null) {
+            for (Map<String, String> row : personRows) {
+                row.put(ClientConstants.DATE_OF_BIRTH, normalizeDateToDayMonthYear(row.get(ClientConstants.DATE_OF_BIRTH)));
+            }
+        }
+        List<Map<String, String>> policyRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY_POLICY_TABLE);
+        if (policyRows != null) {
+            for (Map<String, String> row : policyRows) {
+                row.put("commencementDt", normalizeDateToDayMonthYear(row.get("commencementDt")));
+            }
+        }
+    }
+
+    private String trimTo255(String value) {
+        if (value == null) {
+            return "";
+        }
+        value = value.trim();
+        return value.length() > 255 ? value.substring(0, 255) : value;
     }
 
     private void normalizeClaimAdditionalFieldPaymentDate(final Map<String, List<Map<String, String>>> tableData) {
@@ -724,27 +679,12 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             if (!"PAYMENT_DATE".equalsIgnoreCase(fieldKey)) {
                 continue;
             }
-
             final String rawDate = emptyIfNull(row.get(ClientConstants.FIELD_VALUE)).trim();
             final String normalizedDate = normalizeDateToDayMonthYear(rawDate);
             if (!normalizedDate.isBlank()) {
                 row.put(ClientConstants.FIELD_VALUE, normalizedDate);
             }
         }
-    }
-
-    private void assignAutoIncrementIdentifiers(final Map<String, String> rowData, final boolean isClaimHistoryClientTable) {
-        final String nextId = isClaimHistoryClientTable ? String.valueOf(nextClaimHistoryClientId()) : String.valueOf(nextClientId());
-        rowData.put(ClientConstants.ID, nextId);
-
-    }
-
-    private long nextClientId() {
-        return clientIdCounter++;
-    }
-
-    private long nextClaimHistoryClientId() {
-        return claimHistoryClientIdCounter++;
     }
 
     /**
@@ -764,16 +704,13 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (!isClientTable && !isClaimHistoryClientTable) {
             return;
         }
-
         if (!shouldCreateAdditionalRow(baseRow, tableDef.getCreateAdditionalRow(), isClaimHistoryClientTable, csvRecord)) {
             return;
         }
-
         final List<String> resolvedRoles = resolveAdditionalRoles(csvRecord);
         if (resolvedRoles.isEmpty()) {
             return;
         }
-
         if (isClaimHistoryClientTable) {
             for (String resolvedRole : resolvedRoles) {
                 final Map<String, String> additionalClaimHistoryClientRow =
@@ -790,7 +727,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             }
             return;
         }
-
         final Map<String, String> additionalClientRow = createAdditionalClientRow(guidContext);
         tableData.get(outputTableName).add(additionalClientRow);
         appendClientRelationshipRow(tableData, additionalClientRow, csvRecord, guidContext);
@@ -805,16 +741,13 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (config == null) {
             return isClaimHistoryClientTable;
         }
-
         if (Boolean.FALSE.equals(config.getEnabled())) {
             return false;
         }
-
         final TableDefinition.Condition condition = config.getCondition();
         if (condition == null) {
             return true;
         }
-
         final Map<String, String> conditionValues = buildConditionValueLookup(baseRow, csvRecord);
         return isConditionSatisfied(condition, conditionValues);
     }
@@ -838,10 +771,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final String resolvedRole,
             final Map<String, String> guidContext,
             final CSVRecord csvRecord) {
-
         final Map<String, String> row = new LinkedHashMap<>();
         final String claimHistoryClientRefGuid = UUID.randomUUID().toString();
-        row.put(ClientConstants.ID, String.valueOf(nextClaimHistoryClientId()));
         row.put(ClientConstants.CLIENT_REF_GUID, claimHistoryClientRefGuid);
         row.put(ClientConstants.CLAIM_HISTORY_REF_GUID_COL, baseRow.get(ClientConstants.CLAIM_HISTORY_REF_GUID_COL));
         row.put("clientCd", baseRow.get("clientCd"));
@@ -853,11 +784,9 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private Map<String, String> createAdditionalClientRow(final Map<String, String> guidContext) {
-
         final Map<String, String> row = new LinkedHashMap<>();
-        row.put(ClientConstants.ID, String.valueOf(nextClientId()));
         final String clientGuid = UUID.randomUUID().toString();
-        final String clientNumGuid = UUID.randomUUID().toString();
+        final String clientNumGuid = "CL-" + clientNumCounter++;
         row.put(ClientConstants.CLIENT_GUID, clientGuid);
         row.put(ClientConstants.CLIENT_NUM, clientNumGuid);
         row.put(ClientConstants.CLIENT_TYPE_CD, ClientConstants.PERSON_CLIENT_TYPE);
@@ -887,7 +816,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             addIdentity(tableData, personGuid, typeCd, "");
             return;
         }
-
         if (ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd) || ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
             // identityTypeCd from TPCR_KYC_NOM_SUBMIT, identityNum = blank
             addIdentity(tableData, personGuid, readCsvValueSafely(csvRecord, "TPCR_KYC_NOM_SUBMIT"), "");
@@ -919,13 +847,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         final String safeTypeCd = identityTypeCd == null ? "" : identityTypeCd.trim();
         final String safeNum    = identityNum    == null ? "" : identityNum.trim();
 
-        // Skip if both are blank
         if (safeTypeCd.isBlank() && safeNum.isBlank()) {
             return;
         }
-
         final Map<String, String> row = new LinkedHashMap<>();
-        row.put("id", String.valueOf(personIdentityIdCounter++));
         row.put("personIdentityGuid", UUID.randomUUID().toString());
         row.put(ClientConstants.PERSON_GUID_COL, personGuid);
         row.put("identityTypeCd", safeTypeCd);
@@ -947,21 +872,16 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 && !ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) {
             return; // skip INSURED / APPOINTEE
         }
-
         String claimHistoryRefGuid = claimHistoryClientRow.get(ClientConstants.CLAIM_HISTORY_REF_GUID);
-
         final String accountNumber = resolveAccountNumber(csvRecord);
         if (accountNumber.isBlank()) {
             return;
         }
-
         String clientRefGuid = claimHistoryClientRow.get(ClientConstants.CLIENT_REF_GUID);
-
         final Map<String, String> row = buildConfiguredDerivedRow(
                 ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE,
                 csvRecord,
                 Map.of(
-                        ClientConstants.ID, String.valueOf(claimHistoryPaymentIdCounter++),
                         "claimHistoryPaymentGuid", UUID.randomUUID().toString(),
                         "clientRefGuid", clientRefGuid,
                         "claim_history_ref_guid", claimHistoryRefGuid,
@@ -971,12 +891,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                         "paymentMethodCd", "BANK_TRANSFER"
 
                 ));
-
         addRowToConfiguredTable(tableData, ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE, row);
     }
 
     private String resolveAccountNumber(CSVRecord csvRecord) {
-
         // Prefer TPCR_CLAIMANTBANKACCOUNT; if both have a value TPCR_CLAIMANTBANKACCOUNT wins
         String claimantAcc = readCsvValueSafely(csvRecord, "TPCR_CLAIMANTBANKACCOUNT");
         if (!claimantAcc.isBlank()) {
@@ -996,7 +914,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String resolveIfsc(CSVRecord csvRecord) {
-
         // Prefer TPCR_CLAIMANTBRANCHIFSC; if both have a value TPCR_CLAIMANTBRANCHIFSC wins
         String claimantIfsc = readCsvValueSafely(csvRecord, "TPCR_CLAIMANTBRANCHIFSC");
         if (!claimantIfsc.isBlank()) {
@@ -1006,11 +923,9 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String resolveRelatedToInsuredCd(final String roleCd, final CSVRecord csvRecord) {
-
         if ("Insured".equalsIgnoreCase(roleCd) || "Appointee".equalsIgnoreCase(roleCd) ) {
             return ""; // as per requirement
         }
-
         final String relation = readCsvValueSafely(csvRecord, "TPCR_RELATION");
         if (!relation.isBlank()) {
             final String mapped = mapRelationToRelatedToInsuredCd(relation);
@@ -1018,12 +933,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 return mapped;
             }
         }
-
         return "";
     }
 
     private String mapRelationToRelatedToInsuredCd(final String relation) {
-
         if ("Son".equalsIgnoreCase(relation) || "Daughter".equalsIgnoreCase(relation)) {
             return "CHILD";
         }
@@ -1067,19 +980,16 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final Map<String, String> clientRow,
             final CSVRecord csvRecord,
             final Map<String, String> guidContext) {
-
         final String clientGuidTo = clientRow.getOrDefault(ClientConstants.CLIENT_GUID, "");
         if (clientGuidTo.isBlank()) {
             return;
         }
-
         final String clientRefGuid = clientRow.getOrDefault(ClientConstants.CLIENT_REF_GUID, "");
         final String relationshipCd = normalizeRelationshipCd(resolveRelationshipCdForClientRef(clientRefGuid, guidContext, csvRecord));
         final Map<String, String> relationshipRow = buildConfiguredDerivedRow(
                 ClientConstants.CLIENT_RELATIONSHIP_TABLE,
                 csvRecord,
                 Map.of(
-                        ClientConstants.ID, String.valueOf(clientRelationshipIdCounter++),
                         "clientGuidTo", clientGuidTo,
                         "relationshipTypeCd", ClientConstants.PERSON_RELATIONSHIP_TYPE_CD,
                         ClientConstants.RELATIONSHIP_CD, relationshipCd,
@@ -1093,7 +1003,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final String clientRefGuid,
             final Map<String, String> guidContext,
             final CSVRecord csvRecord) {
-
         if (clientRefGuid != null && !clientRefGuid.isBlank()) {
             final String cached = guidContext.get(ClientConstants.RELATIONSHIP_CD_PREFIX + clientRefGuid);
             if (cached != null && !cached.isBlank()) {
@@ -1117,7 +1026,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String resolveClientRefGuid(final Map<String, String> guidContext) {
-
         final String secondary = guidContext.get(ClientConstants.CLAIM_HISTORY_CLIENT_REF_SECONDARY);
         if (secondary != null && !secondary.isBlank()) {
             return secondary;
@@ -1133,7 +1041,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      * Resolves role type for additional rows from CSV data.
      */
     private List<String> resolveAdditionalRoles(final CSVRecord csvRecord) {
-
         String relationType = readCsvValueSafely(csvRecord, "TPCR_REL_TYPE");
         if (relationType.isBlank()) {
             return List.of();
@@ -1154,8 +1061,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if ("BOTH".equalsIgnoreCase(relationType)) {
             return List.of(ClientConstants.ROLE_CLAIMANT, ClientConstants.ROLE_APPOINTEE);
         }
-
-        // default
         return List.of(relationType);
     }
 
@@ -1186,7 +1091,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 ClientConstants.CLIENT_ADDRESS_TABLE,
                 csvRecord,
                 Map.of(
-                        ClientConstants.ID, String.valueOf(clientAddressIdCounter++),
                         "clientAddressGuid", UUID.randomUUID().toString(),
                         ClientConstants.CLIENT_GUID_LINK, claimHistoryClientRow.getOrDefault(ClientConstants.CLIENT_REF_GUID, ""),
                         ClientConstants.TYPE_CD, ClientConstants.RESIDENCE_TYPE_CD,
@@ -1247,7 +1151,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 ClientConstants.CLIENT_PHONE_TABLE,
                 csvRecord,
                 Map.of(
-                        ClientConstants.ID, String.valueOf(clientPhoneIdCounter++),
                         "clientPhoneGuid", UUID.randomUUID().toString(),
                         ClientConstants.CLIENT_GUID_LINK, claimHistoryClientRow.getOrDefault(ClientConstants.CLIENT_REF_GUID, ""),
                         ClientConstants.TYPE_CD, ClientConstants.MOBILE_TYPE_CD,
@@ -1274,18 +1177,15 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             log.debug("Skipping CLIENT_EMAIL row – emailId is blank for roleCd '{}'", claimHistoryClientRow.get(ClientConstants.ROLE_CD));
             return;
         }
-
         final Map<String, String> clientEmailRow = buildConfiguredDerivedRow(
                 ClientConstants.CLIENT_EMAIL_TABLE,
                 csvRecord,
                 Map.of(
-                        ClientConstants.ID, String.valueOf(clientEmailIdCounter++),
                         "clientEmailGuid", UUID.randomUUID().toString(),
                         ClientConstants.CLIENT_GUID_LINK, claimHistoryClientRow.getOrDefault(ClientConstants.CLIENT_REF_GUID, ""),
                         ClientConstants.TYPE_CD, ClientConstants.PERSONAL_EMAIL_TYPE_CD,
                         "emailId", emailId
                 ));
-
         addRowToConfiguredTable(tableData, ClientConstants.CLIENT_EMAIL_TABLE, clientEmailRow);
     }
 
@@ -1296,13 +1196,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final Map<String, List<Map<String, String>>> tableData,
             final Map<String, String> claimHistoryClientRow,
             final CSVRecord csvRecord) {
-
         String roleCd = claimHistoryClientRow.get(ClientConstants.ROLE_CD);
-
         if (!"Insured".equalsIgnoreCase(roleCd)) {
             return; // skip nominee / claimant
         }
-
         final String clientRefGuid = claimHistoryClientRow.getOrDefault(ClientConstants.CLIENT_REF_GUID, "");
         appendConfiguredAdditionalFieldRows(
                 tableData,
@@ -1310,8 +1207,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 ClientConstants.CLIENT_GUID_LINK,
                 clientRefGuid,
                 "clientAddFldGuid",
-                csvRecord,
-                true);
+                csvRecord);
     }
 
     /**
@@ -1329,8 +1225,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 ClientConstants.CLAIM_GUID_LINK,
                 claimGuid,
                 "claimAddFldGuid",
-                csvRecord,
-                false);
+                csvRecord);
     }
 
     /**
@@ -1350,7 +1245,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 ClientConstants.PERSON_TABLE,
                 csvRecord,
                 Map.of(
-                        ClientConstants.ID, String.valueOf(personIdCounter++),
                         ClientConstants.PERSON_GUID_COL, personGuid,
                         ClientConstants.CLIENT_GUID_LINK, claimHistoryClientRow.getOrDefault(ClientConstants.CLIENT_REF_GUID, ""),
                         "firstName", firstName,
@@ -1431,7 +1325,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private boolean isConditionSatisfied(
             final TableDefinition.Condition condition,
             final Map<String, String> values) {
-
         if (condition == null) {
             return false;
         }
@@ -1439,7 +1332,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (anyNotEmpty == null || anyNotEmpty.isEmpty()) {
             return false;
         }
-
         for (String field : anyNotEmpty) {
             if (field == null || field.isBlank()) {
                 continue;
@@ -1459,7 +1351,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private Map<String, String> buildRowData(
             final CSVRecord csvRecord, final TableDefinition tableDef,
             final String currentTableGuid, final Map<String, String> guidContext) {
-
         if (validateParentGuidPresent(tableDef, guidContext) && validateRootGuidPresent(tableDef, guidContext)) {
             final Map<String, String> rowData = new LinkedHashMap<>();
             populateColumns(csvRecord, tableDef, currentTableGuid, rowData, guidContext);
@@ -1572,7 +1463,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private Map<String, List<Map<String, String>>> initializeTableStructure() {
-
         if (tableMappingConfiguration.getTables() == null) {
             throw new IllegalStateException("table-mapping.tables configuration is missing in YAML.");
         }
@@ -1593,7 +1483,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
 
     public String convertResultSetToCsv(final ResultSet resultSet) throws SQLException {
-
         final ResultSetMetaData metaData = resultSet.getMetaData();
         final int columnCount = metaData.getColumnCount();
         try (StringWriter writer = new StringWriter(); CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT)) {
@@ -1620,7 +1509,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String resolveColumnLabel(final ResultSetMetaData metaData, final int columnIndex) throws SQLException {
-
         final String label = metaData.getColumnLabel(columnIndex);
         if (label != null && !label.isBlank()) {
             return label.trim();
@@ -1710,7 +1598,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
 
     private Map<String, List<String>> resolveConfiguredSheetHeaders() {
-
         final Map<String, List<String>> configuredHeadersBySheet = new LinkedHashMap<>();
         if (tableMappingConfiguration.getTables() == null) {
             return configuredHeadersBySheet;
@@ -1723,7 +1610,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private List<String> buildConfiguredHeaders(final TableDefinition definition) {
-
         final List<String> headers = new ArrayList<>();
         if (definition == null) {
             return headers;
@@ -1764,7 +1650,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private Map<String, String> createConfiguredRow(final String logicalTableName) {
-
         final Map<String, String> row = new LinkedHashMap<>();
         final TableDefinition tableDefinition = getTableDefinition(logicalTableName);
         if (tableDefinition == null || tableDefinition.getColumns() == null) {
@@ -1775,7 +1660,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private TableDefinition getTableDefinition(final String logicalTableName) {
-
         if (tableMappingConfiguration.getTables() == null) {
             return null;
         }
@@ -1834,7 +1718,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (columnDefinition == null || candidateIdentifiers == null || candidateIdentifiers.isEmpty()) {
             return "";
         }
-
         final Set<String> configuredIdentifiers = new HashSet<>();
         if (columnDefinition.getIdentifiers() != null) {
             columnDefinition.getIdentifiers().stream()
@@ -1842,7 +1725,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                     .filter(value -> !value.isBlank())
                     .forEach(configuredIdentifiers::add);
         }
-
         return candidateIdentifiers.stream()
                 .map(candidateIdentifier -> {
                     final String normalized = normalizeValueKey(candidateIdentifier);
@@ -1860,7 +1742,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String resolveIdentifierValue(final CSVRecord csvRecord, final String identifier) {
-
         final String trimmedIdentifier = identifier == null ? "" : identifier.trim();
         if (trimmedIdentifier.isBlank()) {
             return "";
@@ -1876,7 +1757,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private String readCsvValueByIdentifier(final CSVRecord csvRecord, final String identifier) {
-
         final String normalizedIdentifier = normalizeValueKey(identifier);
         if (normalizedIdentifier.isBlank()) {
             return "";
@@ -1895,7 +1775,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private boolean isLiteralCandidate(final String identifier) {
-
         final String trimmedIdentifier = identifier == null ? "" : identifier.trim();
         if (trimmedIdentifier.isBlank()) {
             return false;
@@ -1915,9 +1794,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final String linkColumnName,
             final String linkValue,
             final String guidColumnName,
-            final CSVRecord csvRecord,
-            final boolean clientField) {
-
+            final CSVRecord csvRecord) {
         final TableDefinition tableDefinition = getTableDefinition(logicalTableName);
         if (tableDefinition == null || tableDefinition.getColumns() == null) {
             return;
@@ -1934,12 +1811,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                     if (fieldValue.isBlank()) {
                         return;
                     }
-                    final String id = clientField ? String.valueOf(clientAddFldIdCounter++) : String.valueOf(claimantAddFldIdCounter++);
                     final Map<String, String> row = buildConfiguredDerivedRow(
                             logicalTableName,
                             csvRecord,
                             Map.of(
-                                    ClientConstants.ID, id,
                                     linkColumnName, emptyIfNull(linkValue),
                                     guidColumnName, UUID.randomUUID().toString(),
                                     ClientConstants.FIELD_KEY, trimmedFieldKey,
@@ -2198,27 +2073,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         ordered.putAll(rowData);
         log.debug("Generated GUID {} for table '{}'", guid, tableName);
         return ordered;
-    }
-
-    private void assignCoverageIdentifierIfRequired(
-            final String outputTableName,
-            final Map<String, String> rowData) {
-
-        if (ClientConstants.CLAIM_HISTORY.equalsIgnoreCase(outputTableName)) {
-            rowData.put(ClientConstants.ID, String.valueOf(claimHistoryIdCounter++));
-            return;
-        }
-        if (ClientConstants.CLAIM_HISTORY_POLICY_TABLE.equalsIgnoreCase(outputTableName)) {
-            rowData.put(ClientConstants.ID, String.valueOf(claimHistoryPolicyIdCounter++));
-            return;
-        }
-        if (ClientConstants.CLAIM_HISTORY_COVERAGE_TABLE.equalsIgnoreCase(outputTableName)) {
-            rowData.put(ClientConstants.ID, String.valueOf(claimHistoryCoverageIdCounter++));
-            return;
-        }
-        if (ClientConstants.CLAIM_HISTORY_COV_BENEFIT_TABLE.equalsIgnoreCase(outputTableName)) {
-            rowData.put(ClientConstants.ID, String.valueOf(claimHistoryCoverageBenefitIdCounter++));
-        }
     }
 
     /**

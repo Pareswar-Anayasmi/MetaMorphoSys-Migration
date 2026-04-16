@@ -7,14 +7,10 @@ table-mapping:
     CLAIM_HISTORY:
 
       tableName: CLAIM_HISTORY
-      guidColumn: id
+      guidColumn: claimGuid
       skipIfEmpty: false
 
       columns:
-
-        claimGuid:
-          identifiers:
-            - id
 
         claimNum:
           identifiers:
@@ -98,7 +94,6 @@ table-mapping:
       tableName: CLAIM_HISTORY_CLIENT
       parent: CLAIM_HISTORY
       parentGuidRef: claim_history_ref_guid
-      guidColumn: id
       skipIfEmpty: true
 
       createAdditionalRow:
@@ -107,10 +102,6 @@ table-mapping:
             - roleCd
 
       columns:
-
-        clientRefGuid:
-          identifiers:
-            - id
 
         masterPolicyNum:
           identifiers:
@@ -138,7 +129,6 @@ table-mapping:
       tableName: CLAIM_HISTORY_POLICY
       parent: CLAIM_HISTORY
       parentGuidRef: claim_history_ref_guid
-      guidColumn: id
       skipIfEmpty: true
       columns:
 
@@ -175,11 +165,6 @@ table-mapping:
 
       # Declared for config consistency; values are filled in service logic.
       columns:
-
-        id:
-          identifiers:
-            - id
-
         fromEffectiveDT:
           identifiers:
             -
@@ -270,11 +255,6 @@ table-mapping:
       skipIfEmpty: true
 
       columns:
-
-        id:
-          identifiers:
-            - id
-
         clientRefGuid:
           identifiers:
             - clientRefGuid
@@ -323,11 +303,6 @@ table-mapping:
       skipIfEmpty: false
 
       columns:
-
-        id:
-          identifiers:
-            - id
-
         claimHistoryCoverageGuid:
           identifiers:
             - claimHistoryCoverageGuid
@@ -349,11 +324,6 @@ table-mapping:
       skipIfEmpty: false
 
       columns:
-
-        id:
-          identifiers:
-            - id
-
         claimHistoryCoverageGuid:
           identifiers:
             - claimHistoryCoverageGuid
@@ -369,7 +339,6 @@ table-mapping:
     CLIENT:
 
       tableName: CLIENT
-      guidColumn: id
       skipIfEmpty: true
 
       createAdditionalRow:
@@ -405,11 +374,6 @@ table-mapping:
 
       # Declared for config consistency; values are filled in service logic.
       columns:
-
-        id:
-          identifiers:
-            - id
-
         clientAddressGuid:
           identifiers:
             - clientAddressGuid
@@ -465,11 +429,6 @@ table-mapping:
 
       # Declared for config consistency; values are filled in service logic.
       columns:
-
-        id:
-          identifiers:
-            - id
-
         clientPhoneGuid:
           identifiers:
             - clientPhoneGuid
@@ -506,11 +465,6 @@ table-mapping:
 
       # Declared for config consistency; values are filled in service logic.
       columns:
-
-        id:
-          identifiers:
-            - id
-
         clientEmailGuid:
           identifiers:
             - clientEmailGuid
@@ -547,11 +501,6 @@ table-mapping:
 
       # Declared for config consistency; values are filled in service logic.
       columns:
-
-        id:
-          identifiers:
-            - id
-
         clientGuidTo:
           identifiers:
             - clientGuidTo
@@ -594,11 +543,6 @@ table-mapping:
 
       # Declared for config consistency; values are filled in service logic.
       columns:
-
-        id:
-          identifiers:
-            - id
-
         fromEffectiveDT:
           identifiers:
             -
@@ -648,11 +592,6 @@ table-mapping:
 
       # Declared for config consistency; values are filled in service logic.
       columns:
-
-        id:
-          identifiers:
-            - id
-
         personGuid:
           identifiers:
             - personGuid
@@ -710,11 +649,6 @@ table-mapping:
 
       # Declared for config consistency; values are filled in service logic.
       columns:
-
-        id:
-          identifiers:
-            - id
-
         personIdentityGuid:
           identifiers:
             - personIdentityGuid
