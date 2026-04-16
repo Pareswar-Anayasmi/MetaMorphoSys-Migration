@@ -1045,19 +1045,15 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (relationType.isBlank()) {
             return List.of();
         }
-
         if ("GUARDIAN".equalsIgnoreCase(relationType)) {
             return List.of(ClientConstants.ROLE_APPOINTEE);
         }
-
         if ("NOMINEE".equalsIgnoreCase(relationType)) {
             return List.of(ClientConstants.ROLE_NOMINEE);
         }
-
         if ("CLAIMANT".equalsIgnoreCase(relationType)) {
             return List.of(ClientConstants.ROLE_CLAIMANT);
         }
-
         if ("BOTH".equalsIgnoreCase(relationType)) {
             return List.of(ClientConstants.ROLE_CLAIMANT, ClientConstants.ROLE_APPOINTEE);
         }
