@@ -1,4 +1,16 @@
 table-mapping:
+
+  mappings:
+    relation:
+      Son: CHILD
+      Daughter: CHILD
+      Wife: SPOUSE/PARTNER
+      Husband: SPOUSE/PARTNER
+      Mother: PARENT
+      Father: PARENT
+      Brother: SIBLING
+      Sister: SIBLING
+
   tables:
 
     # =========================================================
@@ -287,8 +299,7 @@ table-mapping:
             - TPCR_CLAIMANTBRANCHIFSC
 
         paymentMethodCd:
-          identifiers:
-            - BANK TRANSFER
+          literal: BANK_TRANSFER
 
         claim_history_ref_guid:
           identifiers:
@@ -353,8 +364,7 @@ table-mapping:
             - TPCR_CUST_ID
 
         clientTypeCd:
-          identifiers:
-            - TPCR_REL_TYPE
+          literal: PERSON
 
         clientNum:
           identifiers:
@@ -383,8 +393,7 @@ table-mapping:
             - clientGuid
 
         typeCd:
-          identifiers:
-            - typeCd
+          literal: RESIDENCE
 
         addressLine1:
           identifiers:
@@ -438,8 +447,7 @@ table-mapping:
             - clientGuid
 
         typeCd:
-          identifiers:
-            - typeCd
+          literal: MOBILE
 
         contactNum:
           identifiers:
@@ -506,8 +514,7 @@ table-mapping:
             - clientGuidTo
 
         relationshipTypeCd:
-          identifiers:
-            - relationshipTypeCd
+          literal: PERSON
 
         relationshipCd:
           identifiers:

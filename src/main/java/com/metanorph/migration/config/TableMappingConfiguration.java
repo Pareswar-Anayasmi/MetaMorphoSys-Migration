@@ -78,4 +78,6 @@ public class TableMappingConfiguration {
         private List<String> identifiers;
         private String literal;
     }
+
+    private Map<String, Map<String, String>> mappings;
 }
