@@ -347,6 +347,67 @@ table-mapping:
           identifiers:
             - claimHistoryCovBenefitGuid
 
+    CLAIM_HISTORY_SETTLEMENT:
+
+      tableName: CLAIM_HISTORY_SETTLEMENT
+      skipIfEmpty: true
+
+      columns:
+
+        approvedAmtPolCurrency:
+          identifiers:
+            - PAYMENT_AMOUNT
+
+        claim_history_ref_guid:
+          identifiers:
+            - claim_history_ref_guid
+
+        claim_history_settlement_guid:
+          identifiers:
+            - CLAIM_HISTORY_SETTLEMENT_GUID
+
+    TASK:
+
+      tableName: TASK
+      skipIfEmpty: true
+
+      columns:
+
+        taskGuid:
+          identifiers:
+            - TASK_GUID
+
+        claimhistoryrefguid:
+          identifiers:
+            - claimGuid
+
+        status:
+          literal: PENDING
+
+        taskUser:
+          literal: Superadmin
+
+        serviceTask:
+          literal: CLAIM_INTIMATION
+
+        priority:
+          literal: MEDIUM
+
+        startDt:
+          literal: GETDATE()
+
+        createdDt:
+          literal: GETDATE()
+
+        updatedDt:
+          literal: GETDATE()
+
+        baseCompanyCd:
+          literal: SBIL
+
+        workQueue:
+          literal: CLAIM_INTIMATION
+
     CLIENT:
 
       tableName: CLIENT

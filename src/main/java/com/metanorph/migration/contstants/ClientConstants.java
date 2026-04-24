@@ -8,6 +8,7 @@ public class ClientConstants {
     private ClientConstants() {}
 
     public static final String CLIENT_TABLE = "CLIENT";
+    public static final String TASK = "TASK";
     public static final String CLIENT_GUID = "client_guid";
     public static final String ID = "id";
     public static final String CLIENT_TYPE_CD = "clientTypeCd";
@@ -61,6 +62,7 @@ public class ClientConstants {
     public static final String CLAIM_HISTORY_COV_BENEFIT_TABLE = "CLAIM_HISTORY_COV_BENEFIT";
     public static final String CLAIM_ADDITIONAL_FIELD_TABLE = "CLAIM_ADDITIONAL_FIELD";
     public static final String PLAN_CD = "planCd";
+    public static final String APPROVED_AMT_CURRENCY = "approvedAmtPolCurrency";
     public static final String BENEFIT_CD = "benefitCd";
     public static final String RELATIONSHIP_CD = "relationshipCd";
     public static final String FIELD_KEY = "fieldKey";
@@ -73,4 +75,6 @@ public class ClientConstants {
     public static final String CLIENT_NUM = "clientNum";
     public static final String CLIENT_NUM_TO_COL = "clientNumTo";
     public static final String DATE_OF_BIRTH = "dateOfBirth";
+    public static final String DATE_FORMAT = "dd/MM/yyyy";
+    public static final String TPCR_CLAIM_DECSN_CD = "TPCR_CLAIM_DECSN";
 }
