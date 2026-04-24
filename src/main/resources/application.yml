@@ -26,7 +26,7 @@ table-mapping:
 
         claimNum:
           identifiers:
-            - TPCR_CLAIMID
+            - CLAIM_NUMBER
 
         causeOfDeathCd:
           identifiers:
@@ -225,6 +225,7 @@ table-mapping:
             - TPCR_IS_MATCH_BENIF_ACC
             - PAYMENT_UTR
             - PAYMENT_DATE
+            - TPCR_CLAIMID
 
         fieldValue:
           identifiers:
@@ -258,6 +259,7 @@ table-mapping:
             - TPCR_IS_MATCH_BENIF_ACC
             - PAYMENT_UTR
             - PAYMENT_DATE
+            - TPCR_CLAIMID
 
     CLAIM_HISTORY_PAYMENT:
 
