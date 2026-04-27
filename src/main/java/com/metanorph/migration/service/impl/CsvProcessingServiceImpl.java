@@ -54,18 +54,11 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private final TableMappingConfiguration tableMappingConfiguration;
     private final DbSourceProperties dbSourceProperties;
-    private long clientNumCounter = 1;
-    private long intimationCounter = 1;
-    private static final boolean FILTER_ONLY_NON_ADMIT = false;
-    private static final String ADMIT_PREFIX = "ADMIT_";
-    private static final Map<String, String> ADMIT_SHEET_NAME_OVERRIDES = Map.of(
-            "ADMIT_CLAIM_HISTORY", "CLM_INITIMATION",
-            "ADMIT_CLAIM_HISTORY_CLIENT", "CLM_INT_CLIENT",
-            "ADMIT_CLAIM_HISTORY_POLICY", "CLM_INT_POLICY",
-            "ADMIT_CLAIM_ADDITIONAL_FIELD", "INITIMATION_ADDITIONAL_FIELD",
-            "ADMIT_CLAIM_HISTORY_PAYMENT", "CLAIM_INT_PAYMENT"
-    );
-    private final Map<String, String> statusByClaimGuid = new HashMap<>();
+     private long clientNumCounter = 1;
+     private long intimationCounter = 1;
+     private static final boolean FILTER_ONLY_NON_ADMIT = true;
+     private static final String ADMIT_PREFIX = "ADMIT_";
+     private final Map<String, String> statusByClaimGuid = new HashMap<>();
 
     /**
      * Processes uploaded file (CSV/Excel) and converts it into Excel output.
@@ -158,7 +151,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             }
         }
         Map<String, List<String>> headersBySheet = resolveConfiguredSheetHeaders();
-        //filter
         if (FILTER_ONLY_NON_ADMIT) {
             Map<String, List<String>> admitHeaders = new LinkedHashMap<>();
             headersBySheet.forEach((sheet, headers) -> {
@@ -168,7 +160,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             });
             headersBySheet.putAll(admitHeaders);
         }
-        //
         List<String> clientHeaders = headersBySheet.get(ClientConstants.CLIENT_TABLE);
         if (clientHeaders != null) {
             clientHeaders.remove(ClientConstants.CLIENT_REF_GUID);
@@ -232,7 +223,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private void processSettlementForSheet(Map<String, List<Map<String, String>>> tableData, String sourceSheet, String targetSheet) {
         List<Map<String, String>> claimRows = Optional.ofNullable(tableData.get(sourceSheet)).orElse(Collections.emptyList());
-
         List<Map<String, String>> settlementRows =
                 claimRows.stream()
                         .filter(row -> {
@@ -246,7 +236,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                         ))
                         .map(HashMap::new)
                         .collect(Collectors.toList());
-
         if (!settlementRows.isEmpty()) {
             tableData.put(targetSheet, settlementRows);
         }
@@ -409,7 +398,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final String tableName, final TableDefinition tableDef,
             final CSVRecord csvRecord,
             final Map<String, List<Map<String, String>>> tableData, final Map<String, String> guidContext) {
-
         //filter
         final String baseTableName = resolveOutputTableName(tableName, tableDef);
         boolean isAdmit = Boolean.parseBoolean(guidContext.getOrDefault("IS_ADMIT", "false"));
@@ -418,7 +406,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (isDerivedRowTable(tableName)) return;
         final String currentTableGuid = prepareGuidForTable(tableName, tableDef, guidContext);
         Map<String, String> rowData = buildRowData(csvRecord, tableDef, currentTableGuid, guidContext);
-
         if (shouldSkipRow(rowData, tableDef)) {
             log.debug("Skipping empty row for table '{}'", tableName);
             discardPreparedGuidIfUnused(tableName, currentTableGuid, guidContext);
@@ -441,7 +428,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         //
         tableData.get(outputTableName).add(rowData);
         if (ClientConstants.CLAIM_HISTORY.equalsIgnoreCase(outputTableName)) {
-            String claimGuid = rowData.get("claimGuid");
+            String claimGuid = rowData.get(ClientConstants.CLAIM_GUID_LINK);
             String status = guidContext.get("ORIGINAL_STATUS");
             if (claimGuid != null && status != null) {
                 statusByClaimGuid.put(claimGuid, status);
@@ -629,7 +616,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (isEmpty(claimAddFldRows)) return;
         for (Map<String, String> row : claimAddFldRows) {
             final String fieldKey = emptyIfNull(row.get(ClientConstants.FIELD_KEY)).trim();
-            if (!"PAYMENT_DATE".equalsIgnoreCase(fieldKey)) continue;
+            if (!ClientConstants.PAYMENT_DATE_FIELD.equalsIgnoreCase(fieldKey)) continue;
             final String rawDate = emptyIfNull(row.get(ClientConstants.FIELD_VALUE)).trim();
             final String normalizedDate = normalizeDateToDayMonthYear(rawDate);
             if (!normalizedDate.isBlank()) {
@@ -1374,8 +1361,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (columnDefinition == null) return "";
         final String literal = emptyIfNull(columnDefinition.getLiteral()).trim();
         if (!literal.isBlank()) {
-            if ("GETDATE()".equalsIgnoreCase(literal)) {
-                return LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            if (ClientConstants.GETDATE_LITERAL.equalsIgnoreCase(literal)) {
+                return LocalDate.now().format(DateTimeFormatter.ofPattern(ClientConstants.DATE_FORMAT));
             }
             return literal;
         }
@@ -1646,11 +1633,15 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         return resolveAdmitSheetName(logicalTableName).equalsIgnoreCase(outputTableName);
     }
 
-    private boolean isAdmitOutputTable(final String outputTableName) {
-        if (outputTableName == null) return false;
-        if (outputTableName.toUpperCase(Locale.ROOT).startsWith(ADMIT_PREFIX)) return true;
-        return ADMIT_SHEET_NAME_OVERRIDES.containsValue(outputTableName);
-    }
+     private boolean isAdmitOutputTable(final String outputTableName) {
+         if (outputTableName == null) return false;
+         if (outputTableName.toUpperCase(Locale.ROOT).startsWith(ADMIT_PREFIX)) return true;
+         return outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_HISTORY)
+                 || outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_HISTORY_CLIENT)
+                 || outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_HISTORY_POLICY)
+                 || outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_ADDITIONAL_FIELD)
+                 || outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_HISTORY_PAYMENT);
+     }
 
     private String resolveClaimOutputTableName(final String logicalTableName, final boolean isAdmitFlow) {
         final String baseOutputTableName = resolveConfiguredOutputTableName(logicalTableName);
@@ -1665,8 +1656,14 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private String resolveAdmitSheetName(final String baseOutputTableName) {
         if (isBlank(baseOutputTableName)) return "";
-        final String admitDefaultName = ADMIT_PREFIX + baseOutputTableName;
-        return ADMIT_SHEET_NAME_OVERRIDES.getOrDefault(admitDefaultName.toUpperCase(Locale.ROOT), admitDefaultName);
+        return switch (baseOutputTableName.toUpperCase(Locale.ROOT)) {
+            case ClientConstants.CLAIM_HISTORY -> ClientConstants.ADMIT_CLAIM_HISTORY;
+            case ClientConstants.CLAIM_HISTORY_CLIENT_TABLE -> ClientConstants.ADMIT_CLAIM_HISTORY_CLIENT;
+            case ClientConstants.CLAIM_HISTORY_POLICY_TABLE -> ClientConstants.ADMIT_CLAIM_HISTORY_POLICY;
+            case ClientConstants.CLAIM_ADDITIONAL_FIELD_TABLE -> ClientConstants.ADMIT_CLAIM_ADDITIONAL_FIELD;
+            case ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE -> ClientConstants.ADMIT_CLAIM_HISTORY_PAYMENT;
+            default -> ADMIT_PREFIX + baseOutputTableName;
+        };
     }
 
     private boolean isParentGuidRefColumn(final TableDefinition tableDef, final TableMappingConfiguration.ColumnDefinition columnDef) {
@@ -1753,17 +1750,17 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
     }
 
-    private void normalizeClaimHistoryStageAndStatusCd(final String outputTableName, final Map<String, String> rowData, final CSVRecord csvRecord) {
-        if (!"CLAIM_HISTORY".equalsIgnoreCase(outputTableName)) return;
-        final String decision = readCsvValueSafely(csvRecord, "TPCR_CLAIM_DECSN");
-        if ("admit".equalsIgnoreCase(decision)) {
-            rowData.put("stageCd", "PAID");
-            rowData.put(ClientConstants.STATUS_CD, "PAID");
-        } else {
-            rowData.put("stageCd", "PENDING_MANUAL_ADJ");
-            rowData.put("statusCd", "DE_COMPLETE");
-        }
-    }
+     private void normalizeClaimHistoryStageAndStatusCd(final String outputTableName, final Map<String, String> rowData, final CSVRecord csvRecord) {
+         if (!ClientConstants.CLAIM_HISTORY.equalsIgnoreCase(outputTableName)) return;
+         final String decision = readCsvValueSafely(csvRecord, "TPCR_CLAIM_DECSN");
+         if ("admit".equalsIgnoreCase(decision)) {
+             rowData.put("stageCd", ClientConstants.PAID_STATUS);
+             rowData.put(ClientConstants.STATUS_CD, ClientConstants.PAID_STATUS);
+         } else {
+             rowData.put("stageCd", ClientConstants.PENDING_MANUAL_ADJ);
+             rowData.put("statusCd", ClientConstants.DE_COMPLETE_STATUS);
+         }
+     }
 
     private boolean isBlank(String val) {
         return val == null || val.isBlank();
@@ -1784,39 +1781,37 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 ));
     }
 
-    private void addIntimationSequence(Map<String, List<Map<String, String>>> tableData) {
-        List<Map<String, String>> claimRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY);
-        if (claimRows == null || claimRows.isEmpty()) return;
-        for (Map<String, String> row : claimRows) {
-            String status = row.get("statusCd");
-            String normalizedStatus = status == null ? "" : status.trim().toUpperCase();
-            if ("PAID".equals(normalizedStatus)) {
-                row.put("IntimationSeq", "");
-            } else {
-                String seq = String.format("INT-%02d", intimationCounter++);
-                row.put("IntimationSeq", seq);
-            }
-        }
-    }
+     private void addIntimationSequence(Map<String, List<Map<String, String>>> tableData) {
+         List<Map<String, String>> claimRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY);
+         if (isEmpty(claimRows)) return;
+         claimRows.forEach(row -> {
+             String normalizedStatus = emptyIfNull(row.get("statusCd")).trim().toUpperCase(Locale.ROOT);
+             if (ClientConstants.PAID_STATUS.equals(normalizedStatus)) {
+                 row.put("IntimationSeq", "");
+             } else {
+                 row.put("IntimationSeq", String.format("INT-%02d", intimationCounter++));
+             }
+         });
+     }
 
-    private void addTaskSheet(Map<String, List<Map<String, String>>> tableData) {
-        List<Map<String, String>> claimRows = tableData.getOrDefault("CLAIM_HISTORY", Collections.emptyList());
-        List<Map<String, String>> taskRows = new ArrayList<>();
-        for (Map<String, String> row : claimRows) {
-            String claimGuid = row.get("claimGuid");
-            String status = statusByClaimGuid.get(claimGuid);
-            if ("ADMIT".equalsIgnoreCase(status) || "REJ".equalsIgnoreCase(status)) continue;
-
-            Map<String, String> task = buildConfiguredDerivedRow("TASK", null,
-                    Map.of(
-                            "taskGuid", UUID.randomUUID().toString(),
-                            "claimhistoryrefguid", claimGuid
-                    )
-            );
-            taskRows.add(task);
-        }
-        tableData.put("TASK", taskRows);
-    }
+     private void addTaskSheet(Map<String, List<Map<String, String>>> tableData) {
+         List<Map<String, String>> claimRows = tableData.getOrDefault(ClientConstants.CLAIM_HISTORY, Collections.emptyList());
+         List<Map<String, String>> taskRows = claimRows.stream()
+                 .filter(row -> {
+                     String status = statusByClaimGuid.get(row.get("claimGuid"));
+                     return !(ClientConstants.ADMIT.equalsIgnoreCase(status) || "REJ".equalsIgnoreCase(status));
+                 })
+                 .map(row -> buildConfiguredDerivedRow(ClientConstants.TASK_TABLE, null,
+                         Map.of(
+                                 "taskGuid", UUID.randomUUID().toString(),
+                                 "claimhistoryrefguid", row.get("claimGuid")
+                         )
+                 ))
+                 .collect(Collectors.toList());
+         if (!isEmpty(taskRows)) {
+             tableData.put(ClientConstants.TASK_TABLE, taskRows);
+         }
+     }
 
 }
 

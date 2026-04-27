@@ -77,4 +77,20 @@ public class ClientConstants {
     public static final String DATE_FORMAT = "dd/MM/yyyy";
     public static final String TPCR_CLAIM_DECSN_CD = "TPCR_CLAIM_DECSN";
     public static final String CLAIM_HISTORY_SETTLEMENT = "CLAIM_HISTORY_SETTLEMENT";
+    
+    // ADMIT Sheet Name Mappings
+    public static final String ADMIT_CLAIM_HISTORY = "CLM_INITIMATION";
+    public static final String ADMIT_CLAIM_HISTORY_CLIENT = "CLM_INT_CLIENT";
+    public static final String ADMIT_CLAIM_HISTORY_POLICY = "CLM_INT_POLICY";
+    public static final String ADMIT_CLAIM_ADDITIONAL_FIELD = "INITIMATION_ADDITIONAL_FIELD";
+    public static final String ADMIT_CLAIM_HISTORY_PAYMENT = "CLAIM_INT_PAYMENT";
+    
+    // Processing Constants
+    public static final String GETDATE_LITERAL = "GETDATE()";
+    public static final String PAYMENT_DATE_FIELD = "PAYMENT_DATE";
+    public static final String TASK_TABLE = "TASK";
+    public static final String PAID_STATUS = "PAID";
+    public static final String DE_COMPLETE_STATUS = "DE_COMPLETE";
+    public static final String PENDING_MANUAL_ADJ = "PENDING_MANUAL_ADJ";
+    public static final String ADMIT = "ADMIT";
 }
