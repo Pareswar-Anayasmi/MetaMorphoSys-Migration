@@ -77,4 +77,5 @@ public class ClientConstants {
     public static final String DATE_OF_BIRTH = "dateOfBirth";
     public static final String DATE_FORMAT = "dd/MM/yyyy";
     public static final String TPCR_CLAIM_DECSN_CD = "TPCR_CLAIM_DECSN";
+    public static final String CLAIM_HISTORY_SETTLEMENT = "CLAIM_HISTORY_SETTLEMENT";
 }

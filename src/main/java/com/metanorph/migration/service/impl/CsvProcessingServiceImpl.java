@@ -56,7 +56,15 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private final DbSourceProperties dbSourceProperties;
     private long clientNumCounter = 1;
     private long intimationCounter = 1;
-    private static final boolean FILTER_ONLY_NON_ADMIT = true;
+    private static final boolean FILTER_ONLY_NON_ADMIT = false;
+    private static final String ADMIT_PREFIX = "ADMIT_";
+    private static final Map<String, String> ADMIT_SHEET_NAME_OVERRIDES = Map.of(
+            "ADMIT_CLAIM_HISTORY", "CLM_INITIMATION",
+            "ADMIT_CLAIM_HISTORY_CLIENT", "CLM_INT_CLIENT",
+            "ADMIT_CLAIM_HISTORY_POLICY", "CLM_INT_POLICY",
+            "ADMIT_CLAIM_ADDITIONAL_FIELD", "INITIMATION_ADDITIONAL_FIELD",
+            "ADMIT_CLAIM_HISTORY_PAYMENT", "CLAIM_INT_PAYMENT"
+    );
     private final Map<String, String> statusByClaimGuid = new HashMap<>();
 
     /**
@@ -154,8 +162,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (FILTER_ONLY_NON_ADMIT) {
             Map<String, List<String>> admitHeaders = new LinkedHashMap<>();
             headersBySheet.forEach((sheet, headers) -> {
-                if (sheet.startsWith("CLAIM")) {
-                    admitHeaders.put("ADMIT_" + sheet, new ArrayList<>(headers));
+                if (sheet != null && sheet.toUpperCase(Locale.ROOT).startsWith("CLAIM")) {
+                    admitHeaders.put(resolveAdmitSheetName(sheet), new ArrayList<>(headers));
                 }
             });
             headersBySheet.putAll(admitHeaders);
@@ -200,7 +208,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private void replacePaymentClientRefWithClientNum(Map<String, List<Map<String, String>>> tableData) {
-        List<Map<String, String>> payments = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE);
+        List<Map<String, String>> payments = getConfiguredRowsForClaimAndAdmit(tableData, ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE);
         List<Map<String, String>> clients  = getConfiguredRows(tableData, ClientConstants.CLIENT_TABLE);
         if (isEmpty(payments) || isEmpty(clients)) return;
         Map<String, String> clientNumByGuid = toMap(clients, ClientConstants.CLIENT_GUID, ClientConstants.CLIENT_NUM);
@@ -213,10 +221,12 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private void addClaimHistorySettlementSheet(Map<String, List<Map<String, String>>> tableData) {
-        processSettlementForSheet(tableData, ClientConstants.CLAIM_HISTORY, "CLAIM_HISTORY_SETTLEMENT");
+        processSettlementForSheet(tableData, ClientConstants.CLAIM_HISTORY, ClientConstants.CLAIM_HISTORY_SETTLEMENT);
         //filter
         if (FILTER_ONLY_NON_ADMIT) {
-            processSettlementForSheet(tableData, "ADMIT_CLAIM_HISTORY", "ADMIT_CLAIM_HISTORY_SETTLEMENT");
+            processSettlementForSheet(tableData,
+                    resolveClaimOutputTableName(ClientConstants.CLAIM_HISTORY, true),
+                    resolveAdmitSheetName("CLAIM_HISTORY_SETTLEMENT"));
         }
     }
 
@@ -269,8 +279,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      * was shared at creation time). Also fixes CLAIM_HISTORY_PAYMENT rows whose clientRefGuid still holds that temporary random UUID.
      */
     private void syncAdditionalRowClientRefGuidFromClientCd(final Map<String, List<Map<String, String>>> tableData) {
-        final List<Map<String, String>> claimHistoryClientRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY_CLIENT_TABLE);
-        if (claimHistoryClientRows == null || claimHistoryClientRows.isEmpty()) return;
+        final List<Map<String, String>> claimHistoryClientRows = getConfiguredRowsForClaimAndAdmit(tableData, ClientConstants.CLAIM_HISTORY_CLIENT_TABLE);
+        if (claimHistoryClientRows.isEmpty()) return;
         final Map<String, String> clientGuidByOldRef = buildClientGuidByOldRef(tableData);
         final Map<String, String> oldToNewClientRefGuid = new HashMap<>();
         for (Map<String, String> row : claimHistoryClientRows) {
@@ -297,8 +307,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private void applyOldToNewClientRefGuidToPayments(final Map<String, List<Map<String, String>>> tableData, final Map<String, String> oldToNewClientRefGuid) {
         if (oldToNewClientRefGuid.isEmpty()) return;
-        final List<Map<String, String>> paymentRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE);
-        if (paymentRows == null) return;
+        final List<Map<String, String>> paymentRows = getConfiguredRowsForClaimAndAdmit(tableData, ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE);
         for (Map<String, String> paymentRow : paymentRows) {
             final String old = paymentRow.get(ClientConstants.CLIENT_REF_GUID);
             final String updated = oldToNewClientRefGuid.get(old);
@@ -323,8 +332,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private void mapClaimHistoryClientCdToClientGuid(final Map<String, List<Map<String, String>>> tableData) {
         final List<Map<String, String>> clientRows = getConfiguredRows(tableData, ClientConstants.CLIENT_TABLE);
-        final List<Map<String, String>> claimHistoryClientRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY_CLIENT_TABLE);
-        if (clientRows == null || clientRows.isEmpty() || claimHistoryClientRows == null || claimHistoryClientRows.isEmpty()) return;
+        final List<Map<String, String>> claimHistoryClientRows = getConfiguredRowsForClaimAndAdmit(tableData, ClientConstants.CLAIM_HISTORY_CLIENT_TABLE);
+        if (clientRows == null || clientRows.isEmpty() || claimHistoryClientRows.isEmpty()) return;
         final Map<String, String> clientNumByLookupKey = buildClientNumLookup(clientRows);
         applyMappedClientNumToClaimHistoryClients(claimHistoryClientRows, clientNumByLookupKey);
     }
@@ -381,13 +390,13 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      * A fresh {@code guidContext} is created per row so GUIDs never leak between rows.
      */
     private void processSingleRecord(final CSVRecord csvRecord, final Map<String, List<Map<String, String>>> tableData) {
-        String status = csvRecord.get(ClientConstants.TPCR_CLAIM_DECSN_CD);
+        String status = readCsvValueSafely(csvRecord, ClientConstants.TPCR_CLAIM_DECSN_CD);
         log.info("status {}", status);
         final Map<String, String> guidContext = new HashMap<>();
         guidContext.put("ORIGINAL_STATUS", status);
         //filter
-        String filterStatus = csvRecord.get("TPCR_CLAIM_DECSN");
-        boolean isAdmit = "ADMIT".equalsIgnoreCase(filterStatus);
+        String filterStatus = readCsvValueSafely(csvRecord, "TPCR_CLAIM_DECSN");
+        boolean isAdmit = "ADMIT".equalsIgnoreCase(filterStatus.trim());
         //
         guidContext.put("IS_ADMIT", String.valueOf(isAdmit));
         tableMappingConfiguration.getTables().forEach((tableName, tableDef) -> processTable(tableName, tableDef, csvRecord, tableData, guidContext));
@@ -416,8 +425,9 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             return;
         }
         rowData = assignGuidIfRequired(tableName, tableDef, rowData, guidContext);
-        final boolean isClientTable = ClientConstants.CLIENT_TABLE.equalsIgnoreCase(outputTableName);
-        final boolean isClaimHistoryClientTable = ClientConstants.CLAIM_HISTORY_CLIENT_TABLE.equalsIgnoreCase(outputTableName);
+        final boolean isClientTable = isOutputForLogicalTable(outputTableName, ClientConstants.CLIENT_TABLE);
+        final boolean isClaimHistoryClientTable = isOutputForLogicalTable(outputTableName, ClientConstants.CLAIM_HISTORY_CLIENT_TABLE);
+        final boolean isAdmitFlow = isAdmitOutputTable(outputTableName);
         initializeClientScopedRow(rowData, csvRecord, guidContext, isClientTable, isClaimHistoryClientTable);
         normalizeClaimHistoryCauseOfDeathCd(outputTableName, rowData);
         normalizeClaimHistoryStageAndStatusCd(outputTableName, rowData, csvRecord);
@@ -438,7 +448,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             }
         }
         if (isClaimHistoryClientTable) {
-            appendClaimHistoryClientDerivedRows(tableData, rowData, csvRecord);
+            appendClaimHistoryClientDerivedRows(tableData, rowData, csvRecord, isAdmitFlow);
         }
         if (isClientTable || isClaimHistoryClientTable) {
             if (isClientTable) {
@@ -448,7 +458,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
     }
 
-    private static String getString(String baseTableName, boolean isAdmit) {
+    private String getString(String baseTableName, boolean isAdmit) {
         Set<String> claimTables = Set.of(
                 ClientConstants.CLAIM_HISTORY,
                 "CLAIM_HISTORY_CLIENT",
@@ -460,8 +470,9 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 "CLAIM_HISTORY_SETTLEMENT"
         );
         String outputTableName = baseTableName;
-        if (FILTER_ONLY_NON_ADMIT && isAdmit && claimTables.contains(baseTableName)) {
-            outputTableName = "ADMIT_" + baseTableName;
+        final String normalizedBaseTableName = baseTableName == null ? "" : baseTableName.trim().toUpperCase(Locale.ROOT);
+        if (FILTER_ONLY_NON_ADMIT && isAdmit && claimTables.contains(normalizedBaseTableName)) {
+            outputTableName = resolveAdmitSheetName(baseTableName);
         }
         return outputTableName;
     }
@@ -492,16 +503,16 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
     }
 
-    private void appendClaimHistoryClientDerivedRows(final Map<String, List<Map<String, String>>> tableData, final Map<String, String> rowData, final CSVRecord csvRecord) {
+    private void appendClaimHistoryClientDerivedRows(final Map<String, List<Map<String, String>>> tableData, final Map<String, String> rowData, final CSVRecord csvRecord, final boolean isAdmitFlow) {
         appendClientAddressRow(tableData, rowData, csvRecord);
         appendClientPhoneRow(tableData, rowData, csvRecord);
         appendClientEmailRow(tableData, rowData, csvRecord);
         appendClientAddFldRows(tableData, rowData, csvRecord);
-        appendClaimantAddFldRows(tableData, rowData, csvRecord);
+        appendClaimantAddFldRows(tableData, rowData, csvRecord, isAdmitFlow);
         final String roleCd = rowData.get(ClientConstants.ROLE_CD);
         final String personGuid = appendPersonRow(tableData, rowData, csvRecord);
         appendPersonIdentityRows(tableData, personGuid, roleCd, csvRecord);
-        appendClaimHistoryPaymentRow(tableData, rowData, csvRecord);
+        appendClaimHistoryPaymentRow(tableData, rowData, csvRecord, isAdmitFlow);
     }
 
     private void normalizeClientRelationshipGuidTo(final Map<String, List<Map<String, String>>> tableData) {
@@ -638,8 +649,9 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final CSVRecord csvRecord,
             final Map<String, String> guidContext) {
 
-        final boolean isClientTable = ClientConstants.CLIENT_TABLE.equalsIgnoreCase(outputTableName);
-        final boolean isClaimHistoryClientTable = ClientConstants.CLAIM_HISTORY_CLIENT_TABLE.equalsIgnoreCase(outputTableName);
+        final boolean isClientTable = isOutputForLogicalTable(outputTableName, ClientConstants.CLIENT_TABLE);
+        final boolean isClaimHistoryClientTable = isOutputForLogicalTable(outputTableName, ClientConstants.CLAIM_HISTORY_CLIENT_TABLE);
+        final boolean isAdmitFlow = isAdmitOutputTable(outputTableName);
         if (!isClientTable && !isClaimHistoryClientTable) return;
         if (!shouldCreateAdditionalRow(baseRow, tableDef.getCreateAdditionalRow(), isClaimHistoryClientTable, csvRecord)) return;
         final List<String> resolvedRoles = resolveAdditionalRoles(csvRecord);
@@ -652,10 +664,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 appendClientPhoneRow(tableData, additionalClaimHistoryClientRow, csvRecord);
                 appendClientEmailRow(tableData, additionalClaimHistoryClientRow, csvRecord);
                 appendClientAddFldRows(tableData, additionalClaimHistoryClientRow, csvRecord);
-                appendClaimantAddFldRows(tableData, additionalClaimHistoryClientRow, csvRecord);
+                appendClaimantAddFldRows(tableData, additionalClaimHistoryClientRow, csvRecord, isAdmitFlow);
                 final String personGuid = appendPersonRow(tableData, additionalClaimHistoryClientRow, csvRecord);
                 appendPersonIdentityRows(tableData, personGuid, resolvedRole, csvRecord);
-                appendClaimHistoryPaymentRow(tableData, additionalClaimHistoryClientRow, csvRecord);
+                appendClaimHistoryPaymentRow(tableData, additionalClaimHistoryClientRow, csvRecord, isAdmitFlow);
             }
             return;
         }
@@ -754,7 +766,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     /**
      * Creates CLAIM_HISTORY_PAYMENT row based on role-specific account details.
      */
-    private void appendClaimHistoryPaymentRow(final Map<String, List<Map<String, String>>> tableData, final Map<String, String> claimHistoryClientRow, final CSVRecord csvRecord) {
+    private void appendClaimHistoryPaymentRow(final Map<String, List<Map<String, String>>> tableData, final Map<String, String> claimHistoryClientRow, final CSVRecord csvRecord, final boolean isAdmitFlow) {
         String roleCd = claimHistoryClientRow.get(ClientConstants.ROLE_CD);
         if (!ClientConstants.ROLE_NOMINEE.equalsIgnoreCase(roleCd) && !ClientConstants.ROLE_CLAIMANT.equalsIgnoreCase(roleCd)) return;
         String claimHistoryRefGuid = claimHistoryClientRow.get(ClientConstants.CLAIM_HISTORY_REF_GUID);
@@ -773,7 +785,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                         "branchIdNum1", resolveIfsc(csvRecord),
                         "paymentMethodCd", "BANK_TRANSFER"
                 ));
-        addRowToConfiguredTable(tableData, ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE, row);
+        addRowToConfiguredTable(tableData, ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE, row,
+                resolveClaimOutputTableName(ClientConstants.CLAIM_HISTORY_PAYMENT_TABLE, isAdmitFlow));
     }
 
     private String resolveAccountNumber(CSVRecord csvRecord) {
@@ -995,15 +1008,16 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         String roleCd = claimHistoryClientRow.get(ClientConstants.ROLE_CD);
         if (!"Insured".equalsIgnoreCase(roleCd)) return;
         final String clientRefGuid = claimHistoryClientRow.getOrDefault(ClientConstants.CLIENT_REF_GUID, "");
-        appendConfiguredAdditionalFieldRows(tableData, ClientConstants.CLIENT_ADD_FLD_TABLE, ClientConstants.CLIENT_GUID_LINK, clientRefGuid, "clientAddFldGuid", csvRecord);
+        appendConfiguredAdditionalFieldRows(tableData, clientRefGuid, csvRecord);
     }
 
     /**
      * Adds CLAIM additional field rows linked to claim GUID.
      */
-    private void appendClaimantAddFldRows(final Map<String, List<Map<String, String>>> tableData, final Map<String, String> claimHistoryClientRow, final CSVRecord csvRecord) {
+    private void appendClaimantAddFldRows(final Map<String, List<Map<String, String>>> tableData, final Map<String, String> claimHistoryClientRow, final CSVRecord csvRecord, final boolean isAdmitFlow) {
         final String claimGuid = claimHistoryClientRow.getOrDefault(ClientConstants.CLAIM_HISTORY_REF_GUID, "");
-        appendConfiguredAdditionalFieldRows(tableData, ClientConstants.CLAIM_ADDITIONAL_FIELD_TABLE, ClientConstants.CLAIM_GUID_LINK, claimGuid, "claimAddFldGuid", csvRecord);
+        appendConfiguredAdditionalFieldRows(tableData, ClientConstants.CLAIM_ADDITIONAL_FIELD_TABLE, ClientConstants.CLAIM_GUID_LINK, claimGuid, "claimAddFldGuid", csvRecord,
+                resolveClaimOutputTableName(ClientConstants.CLAIM_ADDITIONAL_FIELD_TABLE, isAdmitFlow));
     }
 
     /**
@@ -1427,11 +1441,19 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private void appendConfiguredAdditionalFieldRows(
             final Map<String, List<Map<String, String>>> tableData,
+            final String linkValue,
+            final CSVRecord csvRecord) {
+        appendConfiguredAdditionalFieldRows(tableData, ClientConstants.CLIENT_ADD_FLD_TABLE, ClientConstants.CLIENT_GUID_LINK, linkValue, "clientAddFldGuid", csvRecord, "");
+    }
+
+    private void appendConfiguredAdditionalFieldRows(
+            final Map<String, List<Map<String, String>>> tableData,
             final String logicalTableName,
             final String linkColumnName,
             final String linkValue,
             final String guidColumnName,
-            final CSVRecord csvRecord) {
+            final CSVRecord csvRecord,
+            final String explicitOutputTableName) {
         final TableDefinition tableDefinition = getTableDefinition(logicalTableName);
         if (tableDefinition == null || tableDefinition.getColumns() == null) return;
         final TableMappingConfiguration.ColumnDefinition fieldKeyDefinition = tableDefinition.getColumns().get(ClientConstants.FIELD_KEY);
@@ -1451,7 +1473,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                                     ClientConstants.FIELD_KEY, trimmedFieldKey,
                                     ClientConstants.FIELD_VALUE, fieldValue
                             ));
-                    addRowToConfiguredTable(tableData, logicalTableName, row);
+                    addRowToConfiguredTable(tableData, logicalTableName, row, explicitOutputTableName);
                 });
     }
 
@@ -1581,11 +1603,35 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         return tableData.get(configuredOutputTableName);
     }
 
-    private void addRowToConfiguredTable(final Map<String, List<Map<String, String>>> tableData, final String logicalTableName, final Map<String, String> row) {
-        final List<Map<String, String>> rows = getConfiguredRows(tableData, logicalTableName);
-        if (rows != null) {
-            rows.add(row);
+    private List<Map<String, String>> getConfiguredRowsForClaimAndAdmit(final Map<String, List<Map<String, String>>> tableData, final String logicalTableName) {
+        final List<Map<String, String>> combinedRows = new ArrayList<>();
+        final List<Map<String, String>> baseRows = getConfiguredRows(tableData, logicalTableName);
+        if (baseRows != null) {
+            combinedRows.addAll(baseRows);
         }
+        final String baseOutputTableName = resolveConfiguredOutputTableName(logicalTableName);
+        final String admitOutputTableName = resolveClaimOutputTableName(logicalTableName, true);
+        if (!isBlank(admitOutputTableName) && !admitOutputTableName.equalsIgnoreCase(baseOutputTableName)) {
+            final List<Map<String, String>> admitRows = tableData.get(admitOutputTableName);
+            if (admitRows != null) {
+                combinedRows.addAll(admitRows);
+            }
+        }
+        return combinedRows;
+    }
+
+    private void addRowToConfiguredTable(final Map<String, List<Map<String, String>>> tableData, final String logicalTableName, final Map<String, String> row) {
+        addRowToConfiguredTable(tableData, logicalTableName, row, "");
+    }
+
+    private void addRowToConfiguredTable(final Map<String, List<Map<String, String>>> tableData, final String logicalTableName, final Map<String, String> row,
+                                         final String explicitOutputTableName) {
+        String outputTableName = explicitOutputTableName;
+        if (isBlank(outputTableName)) {
+            outputTableName = resolveConfiguredOutputTableName(logicalTableName);
+        }
+        if (isBlank(outputTableName)) return;
+        tableData.computeIfAbsent(outputTableName, ignored -> new ArrayList<>()).add(row);
     }
 
     private String resolveConfiguredOutputTableName(final String logicalTableName) {
@@ -1593,6 +1639,34 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         final TableDefinition definition = tableMappingConfiguration.getTables().get(logicalTableName);
         if (definition == null) return "";
         return resolveOutputTableName(logicalTableName, definition);
+    }
+
+    private boolean isOutputForLogicalTable(final String outputTableName, final String logicalTableName) {
+        if (logicalTableName.equalsIgnoreCase(outputTableName)) return true;
+        return resolveAdmitSheetName(logicalTableName).equalsIgnoreCase(outputTableName);
+    }
+
+    private boolean isAdmitOutputTable(final String outputTableName) {
+        if (outputTableName == null) return false;
+        if (outputTableName.toUpperCase(Locale.ROOT).startsWith(ADMIT_PREFIX)) return true;
+        return ADMIT_SHEET_NAME_OVERRIDES.containsValue(outputTableName);
+    }
+
+    private String resolveClaimOutputTableName(final String logicalTableName, final boolean isAdmitFlow) {
+        final String baseOutputTableName = resolveConfiguredOutputTableName(logicalTableName);
+        if (!isAdmitFlow || !FILTER_ONLY_NON_ADMIT || isBlank(baseOutputTableName)) {
+            return baseOutputTableName;
+        }
+        if (!baseOutputTableName.toUpperCase(Locale.ROOT).startsWith("CLAIM")) {
+            return baseOutputTableName;
+        }
+        return resolveAdmitSheetName(baseOutputTableName);
+    }
+
+    private String resolveAdmitSheetName(final String baseOutputTableName) {
+        if (isBlank(baseOutputTableName)) return "";
+        final String admitDefaultName = ADMIT_PREFIX + baseOutputTableName;
+        return ADMIT_SHEET_NAME_OVERRIDES.getOrDefault(admitDefaultName.toUpperCase(Locale.ROOT), admitDefaultName);
     }
 
     private boolean isParentGuidRefColumn(final TableDefinition tableDef, final TableMappingConfiguration.ColumnDefinition columnDef) {
