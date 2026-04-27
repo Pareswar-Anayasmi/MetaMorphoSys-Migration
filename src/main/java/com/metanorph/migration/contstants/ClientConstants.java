@@ -8,7 +8,6 @@ public class ClientConstants {
     private ClientConstants() {}
 
     public static final String CLIENT_TABLE = "CLIENT";
-    public static final String TASK = "TASK";
     public static final String CLIENT_GUID = "client_guid";
     public static final String ID = "id";
     public static final String CLIENT_TYPE_CD = "clientTypeCd";
