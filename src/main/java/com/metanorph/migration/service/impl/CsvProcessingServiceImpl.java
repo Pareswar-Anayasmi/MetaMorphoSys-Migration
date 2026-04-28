@@ -55,7 +55,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private final TableMappingConfiguration tableMappingConfiguration;
     private final DbSourceProperties dbSourceProperties;
      private long clientNumCounter = 1;
-     private long intimationCounter = 1;
      private static final boolean FILTER_ONLY_NON_ADMIT = true;
      private static final String ADMIT_PREFIX = "ADMIT_";
      private final Map<String, String> statusByClaimGuid = new HashMap<>();
@@ -126,7 +125,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
      */
     public Workbook processCsv(final Reader reader) {
         log.info("Starting CSV processing");
-        intimationCounter = 1;
         final Map<String, List<Map<String, String>>> tableData = initializeTableStructure();
         int rowNumber = 0;
         try (CSVParser csvParser = createCsvParser(reader)) {
@@ -172,7 +170,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         mapClientReferences(tableData);
         normalizeRelationships(tableData);
         normalizeDates(tableData);
-        addIntimationSequence(tableData);
     }
 
     private void mapPolicyData(Map<String, List<Map<String, String>>> tableData) {
@@ -1786,19 +1783,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 ));
     }
 
-     private void addIntimationSequence(Map<String, List<Map<String, String>>> tableData) {
-         List<Map<String, String>> claimRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY);
-         if (isEmpty(claimRows)) return;
-         claimRows.forEach(row -> {
-             String normalizedStatus = emptyIfNull(row.get("statusCd")).trim().toUpperCase(Locale.ROOT);
-             if (ClientConstants.PAID_STATUS.equals(normalizedStatus)) {
-                 row.put("IntimationSeq", "");
-             } else {
-                 row.put("IntimationSeq", String.format("INT-%02d", intimationCounter++));
-             }
-         });
-     }
-
      private void addTaskSheet(Map<String, List<Map<String, String>>> tableData) {
          List<Map<String, String>> claimRows = new ArrayList<>();
          claimRows.addAll(tableData.getOrDefault(ClientConstants.CLAIM_HISTORY, Collections.emptyList()));
@@ -1815,7 +1799,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                                  "claimhistoryrefguid", row.get("claimGuid")
                          )
                  ))
-                 .collect(Collectors.toList());
+                 .toList();
          if (!isEmpty(taskRows)) {
              tableData.put(ClientConstants.TASK_TABLE, taskRows);
          }
