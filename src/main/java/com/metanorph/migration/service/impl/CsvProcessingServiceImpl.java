@@ -576,7 +576,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private void normalizeClaimHistoryDates(Map<String, List<Map<String, String>>> tableData) {
         // CLAIM_HISTORY
-        List<Map<String, String>> claimRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY);
+        List<Map<String, String>> claimRows = getConfiguredRowsForClaimAndAdmit(tableData, ClientConstants.CLAIM_HISTORY);
         if (claimRows != null) {
             for (Map<String, String> row : claimRows) {
                 row.put("eventDt", normalizeDateToDayMonthYear(row.get("eventDt")));
@@ -594,10 +594,13 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 row.put(ClientConstants.DATE_OF_BIRTH, normalizeDateToDayMonthYear(row.get(ClientConstants.DATE_OF_BIRTH)));
             }
         }
-        List<Map<String, String>> policyRows = getConfiguredRows(tableData, ClientConstants.CLAIM_HISTORY_POLICY_TABLE);
+        List<Map<String, String>> policyRows = getConfiguredRowsForClaimAndAdmit(tableData, ClientConstants.CLAIM_HISTORY_POLICY_TABLE);
+
         if (policyRows != null) {
             for (Map<String, String> row : policyRows) {
                 row.put("commencementDt", normalizeDateToDayMonthYear(row.get("commencementDt")));
+                row.put("lastPremRecdDt", normalizeDateToDayMonthYear(row.get("lastPremRecdDt")));
+                row.put("premiumDueDt", normalizeDateToDayMonthYear(row.get("premiumDueDt")));
             }
         }
     }
@@ -609,11 +612,12 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private void normalizeClaimAdditionalFieldPaymentDate(final Map<String, List<Map<String, String>>> tableData) {
-        final List<Map<String, String>> claimAddFldRows = getConfiguredRows(tableData, ClientConstants.CLAIM_ADDITIONAL_FIELD_TABLE);
+        final List<Map<String, String>> claimAddFldRows = getConfiguredRowsForClaimAndAdmit(tableData, ClientConstants.CLAIM_ADDITIONAL_FIELD_TABLE);
         if (isEmpty(claimAddFldRows)) return;
         for (Map<String, String> row : claimAddFldRows) {
             final String fieldKey = emptyIfNull(row.get(ClientConstants.FIELD_KEY)).trim();
-            if (!ClientConstants.PAYMENT_DATE_FIELD.equalsIgnoreCase(fieldKey)) continue;
+            Set<String> dateFields = Set.of("PAYMENT_DATE", "TPCR_CHKR_DT");
+            if (!dateFields.contains(fieldKey.toUpperCase())) continue;
             final String rawDate = emptyIfNull(row.get(ClientConstants.FIELD_VALUE)).trim();
             final String normalizedDate = normalizeDateToDayMonthYear(rawDate);
             if (!normalizedDate.isBlank()) {
