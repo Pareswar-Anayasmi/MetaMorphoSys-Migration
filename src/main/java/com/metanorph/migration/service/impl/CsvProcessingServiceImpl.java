@@ -1803,12 +1803,14 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 })
                 .map(row -> {
                     String claimRefGuid = row.get("claimGuid");
-                    String claimNum = row.getOrDefault("claimNum", "");
+
+                    // ✅ Use clmIntimationNum instead of claimNum
+                    String clmIntimationNum = row.getOrDefault("clmIntimationNum", "");
 
                     Map<String, String> base = Map.of(
                             "guid", UUID.randomUUID().toString(),
-                            "claimhistoryrefguid", claimRefGuid,
-                            "claimNum", claimNum
+                            "entityGuid", claimRefGuid,
+                            "clmIntimationNum", clmIntimationNum
                     );
 
                     return buildConfiguredDerivedRow(ClientConstants.TASK_TABLE, null, base);

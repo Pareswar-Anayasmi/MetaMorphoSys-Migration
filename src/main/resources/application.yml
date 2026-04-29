@@ -383,7 +383,7 @@ table-mapping:
           identifiers:
             - TASK_GUID
 
-        claimhistoryrefguid:
+        entityGuid:
           identifiers:
             - claimGuid
 
