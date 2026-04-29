@@ -1790,12 +1790,9 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private void addTaskSheet(Map<String, List<Map<String, String>>> tableData) {
-
-        // Combine CLAIM_HISTORY + CLM_INTIMATION
         List<Map<String, String>> claimRows = new ArrayList<>();
         claimRows.addAll(tableData.getOrDefault(ClientConstants.CLAIM_HISTORY, Collections.emptyList()));
         claimRows.addAll(tableData.getOrDefault(ClientConstants.ADMIT_CLAIM_HISTORY, Collections.emptyList()));
-
         List<Map<String, String>> taskRows = claimRows.stream()
                 .filter(row -> {
                     String status = statusByClaimGuid.get(row.get("claimGuid"));
@@ -1803,20 +1800,15 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 })
                 .map(row -> {
                     String claimRefGuid = row.get("claimGuid");
-
-                    // ✅ Use clmIntimationNum instead of claimNum
                     String clmIntimationNum = row.getOrDefault("clmIntimationNum", "");
-
                     Map<String, String> base = Map.of(
                             "guid", UUID.randomUUID().toString(),
                             "entityGuid", claimRefGuid,
                             "clmIntimationNum", clmIntimationNum
                     );
-
                     return buildConfiguredDerivedRow(ClientConstants.TASK_TABLE, null, base);
                 })
                 .toList();
-
         if (!isEmpty(taskRows)) {
             tableData.put(ClientConstants.TASK_TABLE, taskRows);
         }
