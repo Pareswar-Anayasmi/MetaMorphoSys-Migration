@@ -93,6 +93,10 @@ table-mapping:
           identifiers:
             - TPCR_CLAIM_DECSN
 
+        clmIntimationNum:
+          identifiers:
+            -
+
       children:
         - CLAIM_HISTORY_POLICY
         - CLAIM_ADDITIONAL_FIELD
@@ -375,7 +379,7 @@ table-mapping:
 
       columns:
 
-        taskGuid:
+        guid:
           identifiers:
             - TASK_GUID
 

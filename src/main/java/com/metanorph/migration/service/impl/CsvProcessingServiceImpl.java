@@ -54,10 +54,11 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
 
     private final TableMappingConfiguration tableMappingConfiguration;
     private final DbSourceProperties dbSourceProperties;
-     private long clientNumCounter = 1;
-     private static final boolean FILTER_ONLY_NON_ADMIT = true;
-     private static final String ADMIT_PREFIX = "ADMIT_";
-     private final Map<String, String> statusByClaimGuid = new HashMap<>();
+    private long clientNumCounter = 1;
+    private static final boolean FILTER_ONLY_NON_ADMIT = true;
+    private static final String ADMIT_PREFIX = "ADMIT_";
+    private final Map<String, String> statusByClaimGuid = new HashMap<>();
+    private long clmIntimationCounter = 1;
 
     /**
      * Processes uploaded file (CSV/Excel) and converts it into Excel output.
@@ -137,6 +138,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             throw new IllegalStateException("CSV parsing failed. Please verify the file format.", ex);
         }
         clientNumCounter = 1;
+        clmIntimationCounter = 1;
         postProcess(tableData);
         addClaimHistorySettlementSheet(tableData);
         addTaskSheet(tableData);
@@ -229,7 +231,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                         .map(row -> Map.of(
                                 "claim_history_settlement_guid", UUID.randomUUID().toString(),
                                 "approvedAmtPolCurrency", row.get("approvedAmtPolCurrency"),
-                                "claim_history_ref_guid", row.get(ClientConstants.CLAIM_GUID_LINK)
+                                ClientConstants.CLAIM_HISTORY_REF_GUID, row.get(ClientConstants.CLAIM_GUID_LINK)
                         ))
                         .map(HashMap::new)
                         .collect(Collectors.toList());
@@ -380,10 +382,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         log.info("status {}", status);
         final Map<String, String> guidContext = new HashMap<>();
         guidContext.put("ORIGINAL_STATUS", status);
-         //filter
-         String filterStatus = readCsvValueSafely(csvRecord, "TPCR_CLAIM_DECSN");
-         boolean isAdmit = !(ClientConstants.ADMIT.equalsIgnoreCase(filterStatus.trim()));
-         //
+        //filter
+        String filterStatus = readCsvValueSafely(csvRecord, "TPCR_CLAIM_DECSN");
+        boolean isAdmit = !(ClientConstants.ADMIT.equalsIgnoreCase(filterStatus.trim()));
+        //
         guidContext.put("IS_ADMIT", String.valueOf(isAdmit));
         tableMappingConfiguration.getTables().forEach((tableName, tableDef) -> processTable(tableName, tableDef, csvRecord, tableData, guidContext));
     }
@@ -422,15 +424,19 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
         //filter
         tableData.computeIfAbsent(outputTableName, k -> new ArrayList<>());
-         //
-         tableData.get(outputTableName).add(rowData);
-         if (isClaimHistoryTable(outputTableName)) {
-             String claimGuid = rowData.get(ClientConstants.CLAIM_GUID_LINK);
-             String status = guidContext.get("ORIGINAL_STATUS");
-             if (claimGuid != null && status != null) {
-                 statusByClaimGuid.put(claimGuid, status);
-             }
-         }
+        //
+        tableData.get(outputTableName).add(rowData);
+        if ("CLM_INTIMATION".equalsIgnoreCase(outputTableName)) {
+            String generatedNum = String.format("INT%04d", clmIntimationCounter++);
+            rowData.put("clmIntimationNum", generatedNum);
+        }
+        if (isClaimHistoryTable(outputTableName)) {
+            String claimGuid = rowData.get(ClientConstants.CLAIM_GUID_LINK);
+            String status = guidContext.get("ORIGINAL_STATUS");
+            if (claimGuid != null && status != null) {
+                statusByClaimGuid.put(claimGuid, status);
+            }
+        }
         if (isClaimHistoryClientTable) {
             appendClaimHistoryClientDerivedRows(tableData, rowData, csvRecord, isAdmitFlow);
         }
@@ -577,15 +583,13 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private void normalizeClaimHistoryDates(Map<String, List<Map<String, String>>> tableData) {
         // CLAIM_HISTORY
         List<Map<String, String>> claimRows = getConfiguredRowsForClaimAndAdmit(tableData, ClientConstants.CLAIM_HISTORY);
-        if (claimRows != null) {
-            for (Map<String, String> row : claimRows) {
-                row.put("eventDt", normalizeDateToDayMonthYear(row.get("eventDt")));
-                row.put("intimationDt", normalizeDateToDayMonthYear(row.get("intimationDt")));
-                row.put("accidentDt", normalizeDateToDayMonthYear(row.get("accidentDt")));
-                row.put("accidentDts", normalizeDateToDayMonthYear(row.get("accidentDts")));
-                row.put("adjReasonCd", trimTo255(row.get("adjReasonCd")));
-                row.put("adjRemarks", trimTo255(row.get("adjRemarks")));
-            }
+        for (Map<String, String> row : claimRows) {
+            row.put("eventDt", normalizeDateToDayMonthYear(row.get("eventDt")));
+            row.put("intimationDt", normalizeDateToDayMonthYear(row.get("intimationDt")));
+            row.put("accidentDt", normalizeDateToDayMonthYear(row.get("accidentDt")));
+            row.put("accidentDts", normalizeDateToDayMonthYear(row.get("accidentDts")));
+            row.put("adjReasonCd", trimTo255(row.get("adjReasonCd")));
+            row.put("adjRemarks", trimTo255(row.get("adjRemarks")));
         }
         // PERSON (ADD THIS BLOCK)
         List<Map<String, String>> personRows = getConfiguredRows(tableData, ClientConstants.PERSON_TABLE);
@@ -596,12 +600,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
         List<Map<String, String>> policyRows = getConfiguredRowsForClaimAndAdmit(tableData, ClientConstants.CLAIM_HISTORY_POLICY_TABLE);
 
-        if (policyRows != null) {
-            for (Map<String, String> row : policyRows) {
-                row.put("commencementDt", normalizeDateToDayMonthYear(row.get("commencementDt")));
-                row.put("lastPremRecdDt", normalizeDateToDayMonthYear(row.get("lastPremRecdDt")));
-                row.put("premiumDueDt", normalizeDateToDayMonthYear(row.get("premiumDueDt")));
-            }
+        for (Map<String, String> row : policyRows) {
+            row.put("commencementDt", normalizeDateToDayMonthYear(row.get("commencementDt")));
+            row.put("lastPremRecdDt", normalizeDateToDayMonthYear(row.get("lastPremRecdDt")));
+            row.put("premiumDueDt", normalizeDateToDayMonthYear(row.get("premiumDueDt")));
         }
     }
 
@@ -693,7 +695,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         final String claimHistoryClientRefGuid = UUID.randomUUID().toString();
         row.put(ClientConstants.CLIENT_REF_GUID, claimHistoryClientRefGuid);
         row.put(ClientConstants.CLAIM_HISTORY_REF_GUID_COL, baseRow.get(ClientConstants.CLAIM_HISTORY_REF_GUID_COL));
-        row.put("clientCd", baseRow.get("clientCd"));
+        row.put(ClientConstants.CLIENT_CD, baseRow.get(ClientConstants.CLIENT_CD));
         row.put(ClientConstants.ROLE_CD, resolvedRole);
         row.put("relatedToInsuredCd", resolveRelatedToInsuredCd(resolvedRole, csvRecord));
         guidContext.put(ClientConstants.CLAIM_HISTORY_CLIENT_REF_SECONDARY, claimHistoryClientRefGuid);
@@ -1634,15 +1636,15 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         return resolveAdmitSheetName(logicalTableName).equalsIgnoreCase(outputTableName);
     }
 
-     private boolean isAdmitOutputTable(final String outputTableName) {
-         if (outputTableName == null) return false;
-         if (outputTableName.toUpperCase(Locale.ROOT).startsWith(ADMIT_PREFIX)) return true;
-         return outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_HISTORY)
-                 || outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_HISTORY_CLIENT)
-                 || outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_HISTORY_POLICY)
-                 || outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_ADDITIONAL_FIELD)
-                 || outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_HISTORY_PAYMENT);
-     }
+    private boolean isAdmitOutputTable(final String outputTableName) {
+        if (outputTableName == null) return false;
+        if (outputTableName.toUpperCase(Locale.ROOT).startsWith(ADMIT_PREFIX)) return true;
+        return outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_HISTORY)
+                || outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_HISTORY_CLIENT)
+                || outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_HISTORY_POLICY)
+                || outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_ADDITIONAL_FIELD)
+                || outputTableName.equalsIgnoreCase(ClientConstants.ADMIT_CLAIM_HISTORY_PAYMENT);
+    }
 
     private String resolveClaimOutputTableName(final String logicalTableName, final boolean isAdmitFlow) {
         final String baseOutputTableName = resolveConfiguredOutputTableName(logicalTableName);
@@ -1751,22 +1753,22 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         }
     }
 
-     private void normalizeClaimHistoryStageAndStatusCd(final String outputTableName, final Map<String, String> rowData, final CSVRecord csvRecord) {
-         if (!isClaimHistoryTable(outputTableName)) return;
-         final String decision = readCsvValueSafely(csvRecord, "TPCR_CLAIM_DECSN");
-         if ("admit".equalsIgnoreCase(decision)) {
-             rowData.put("stageCd", ClientConstants.PAID_STATUS);
-             rowData.put(ClientConstants.STATUS_CD, ClientConstants.PAID_STATUS);
-         } else {
-             rowData.put("stageCd", ClientConstants.PENDING_MANUAL_ADJ);
-             rowData.put("statusCd", ClientConstants.DE_COMPLETE_STATUS);
-         }
-     }
+    private void normalizeClaimHistoryStageAndStatusCd(final String outputTableName, final Map<String, String> rowData, final CSVRecord csvRecord) {
+        if (!isClaimHistoryTable(outputTableName)) return;
+        final String decision = readCsvValueSafely(csvRecord, "TPCR_CLAIM_DECSN");
+        if ("admit".equalsIgnoreCase(decision)) {
+            rowData.put("stageCd", ClientConstants.PAID_STATUS);
+            rowData.put(ClientConstants.STATUS_CD, ClientConstants.PAID_STATUS);
+        } else {
+            rowData.put("stageCd", ClientConstants.PENDING_MANUAL_ADJ);
+            rowData.put("statusCd", ClientConstants.DE_COMPLETE_STATUS);
+        }
+    }
 
-     private boolean isClaimHistoryTable(final String outputTableName) {
-         return ClientConstants.CLAIM_HISTORY.equalsIgnoreCase(outputTableName)
-                 || ClientConstants.ADMIT_CLAIM_HISTORY.equalsIgnoreCase(outputTableName);
-     }
+    private boolean isClaimHistoryTable(final String outputTableName) {
+        return ClientConstants.CLAIM_HISTORY.equalsIgnoreCase(outputTableName)
+                || ClientConstants.ADMIT_CLAIM_HISTORY.equalsIgnoreCase(outputTableName);
+    }
 
     private boolean isBlank(String val) {
         return val == null || val.isBlank();
@@ -1787,28 +1789,34 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
                 ));
     }
 
-     private void addTaskSheet(Map<String, List<Map<String, String>>> tableData) {
-         List<Map<String, String>> claimRows = new ArrayList<>();
-         claimRows.addAll(tableData.getOrDefault(ClientConstants.CLAIM_HISTORY, Collections.emptyList()));
-         claimRows.addAll(tableData.getOrDefault(ClientConstants.ADMIT_CLAIM_HISTORY, Collections.emptyList()));
-         
-         List<Map<String, String>> taskRows = claimRows.stream()
-                 .filter(row -> {
-                     String status = statusByClaimGuid.get(row.get("claimGuid"));
-                     return !(ClientConstants.ADMIT.equalsIgnoreCase(status) || "REJ".equalsIgnoreCase(status));
-                 })
-                 .map(row -> buildConfiguredDerivedRow(ClientConstants.TASK_TABLE, null,
-                         Map.of(
-                                 "taskGuid", UUID.randomUUID().toString(),
-                                 "claimhistoryrefguid", row.get("claimGuid")
-                         )
-                 ))
-                 .toList();
-         if (!isEmpty(taskRows)) {
-             tableData.put(ClientConstants.TASK_TABLE, taskRows);
-         }
-     }
+    private void addTaskSheet(Map<String, List<Map<String, String>>> tableData) {
 
+        // Combine CLAIM_HISTORY + CLM_INTIMATION
+        List<Map<String, String>> claimRows = new ArrayList<>();
+        claimRows.addAll(tableData.getOrDefault(ClientConstants.CLAIM_HISTORY, Collections.emptyList()));
+        claimRows.addAll(tableData.getOrDefault(ClientConstants.ADMIT_CLAIM_HISTORY, Collections.emptyList()));
+
+        List<Map<String, String>> taskRows = claimRows.stream()
+                .filter(row -> {
+                    String status = statusByClaimGuid.get(row.get("claimGuid"));
+                    return !(ClientConstants.ADMIT.equalsIgnoreCase(status) || "REJ".equalsIgnoreCase(status));
+                })
+                .map(row -> {
+                    String claimRefGuid = row.get("claimGuid");
+                    String claimNum = row.getOrDefault("claimNum", "");
+
+                    Map<String, String> base = Map.of(
+                            "guid", UUID.randomUUID().toString(),
+                            "claimhistoryrefguid", claimRefGuid,
+                            "claimNum", claimNum
+                    );
+
+                    return buildConfiguredDerivedRow(ClientConstants.TASK_TABLE, null, base);
+                })
+                .toList();
+
+        if (!isEmpty(taskRows)) {
+            tableData.put(ClientConstants.TASK_TABLE, taskRows);
+        }
+    }
 }
-
-
