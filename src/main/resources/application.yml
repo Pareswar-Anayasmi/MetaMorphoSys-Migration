@@ -11,6 +11,9 @@ table-mapping:
       Brother: SIBLING
       Sister: SIBLING
 
+  intimation:
+    start: 8000
+
   tables:
 
     # =========================================================

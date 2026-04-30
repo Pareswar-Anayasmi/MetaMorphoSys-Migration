@@ -8,6 +8,7 @@ import com.metanorph.migration.service.CsvProcessingService;
 import com.metanorph.migration.util.CsvReaderUtil;
 import com.metanorph.migration.util.ExcelInputToCsvUtil;
 import com.metanorph.migration.util.ExcelWriterUtil;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
@@ -58,7 +59,10 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     private static final boolean FILTER_ONLY_NON_ADMIT = true;
     private static final String ADMIT_PREFIX = "ADMIT_";
     private final Map<String, String> statusByClaimGuid = new HashMap<>();
-    private long clmIntimationCounter = 1;
+    private long clmIntimationCounter;
+    private static final String INT_PREFIX = "INT";
+    private static final int INT_PAD = 7;
+
 
     /**
      * Processes uploaded file (CSV/Excel) and converts it into Excel output.
@@ -138,7 +142,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             throw new IllegalStateException("CSV parsing failed. Please verify the file format.", ex);
         }
         clientNumCounter = 1;
-        clmIntimationCounter = 1;
+        clmIntimationCounter = tableMappingConfiguration.getIntimation().getStart();
         postProcess(tableData);
         addClaimHistorySettlementSheet(tableData);
         addTaskSheet(tableData);
@@ -382,10 +386,8 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         log.info("status {}", status);
         final Map<String, String> guidContext = new HashMap<>();
         guidContext.put("ORIGINAL_STATUS", status);
-        //filter
         String filterStatus = readCsvValueSafely(csvRecord, "TPCR_CLAIM_DECSN");
         boolean isAdmit = !(ClientConstants.ADMIT.equalsIgnoreCase(filterStatus.trim()));
-        //
         guidContext.put("IS_ADMIT", String.valueOf(isAdmit));
         tableMappingConfiguration.getTables().forEach((tableName, tableDef) -> processTable(tableName, tableDef, csvRecord, tableData, guidContext));
     }
@@ -397,11 +399,9 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             final String tableName, final TableDefinition tableDef,
             final CSVRecord csvRecord,
             final Map<String, List<Map<String, String>>> tableData, final Map<String, String> guidContext) {
-        //filter
         final String baseTableName = resolveOutputTableName(tableName, tableDef);
         boolean isAdmit = Boolean.parseBoolean(guidContext.getOrDefault("IS_ADMIT", "false"));
         String outputTableName = getString(baseTableName, isAdmit);
-        //
         if (isDerivedRowTable(tableName)) return;
         final String currentTableGuid = prepareGuidForTable(tableName, tableDef, guidContext);
         Map<String, String> rowData = buildRowData(csvRecord, tableDef, currentTableGuid, guidContext);
@@ -422,14 +422,14 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             discardPreparedGuidIfUnused(tableName, currentTableGuid, guidContext);
             return;
         }
-        //filter
         tableData.computeIfAbsent(outputTableName, k -> new ArrayList<>());
-        //
         tableData.get(outputTableName).add(rowData);
         if ("CLM_INTIMATION".equalsIgnoreCase(outputTableName)) {
-            String generatedNum = String.format("INT%04d", clmIntimationCounter++);
+            String number = String.format("%0" + INT_PAD + "d", clmIntimationCounter++);
+            String generatedNum = INT_PREFIX + number;
             rowData.put("clmIntimationNum", generatedNum);
         }
+
         if (isClaimHistoryTable(outputTableName)) {
             String claimGuid = rowData.get(ClientConstants.CLAIM_GUID_LINK);
             String status = guidContext.get("ORIGINAL_STATUS");
@@ -581,7 +581,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private void normalizeClaimHistoryDates(Map<String, List<Map<String, String>>> tableData) {
-        // CLAIM_HISTORY
         List<Map<String, String>> claimRows = getConfiguredRowsForClaimAndAdmit(tableData, ClientConstants.CLAIM_HISTORY);
         for (Map<String, String> row : claimRows) {
             row.put("eventDt", normalizeDateToDayMonthYear(row.get("eventDt")));
@@ -591,7 +590,6 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
             row.put("adjReasonCd", trimTo255(row.get("adjReasonCd")));
             row.put("adjRemarks", trimTo255(row.get("adjRemarks")));
         }
-        // PERSON (ADD THIS BLOCK)
         List<Map<String, String>> personRows = getConfiguredRows(tableData, ClientConstants.PERSON_TABLE);
         if (personRows != null) {
             for (Map<String, String> row : personRows) {
@@ -1766,8 +1764,7 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
     }
 
     private boolean isClaimHistoryTable(final String outputTableName) {
-        return ClientConstants.CLAIM_HISTORY.equalsIgnoreCase(outputTableName)
-                || ClientConstants.ADMIT_CLAIM_HISTORY.equalsIgnoreCase(outputTableName);
+        return ClientConstants.CLAIM_HISTORY.equalsIgnoreCase(outputTableName) || ClientConstants.ADMIT_CLAIM_HISTORY.equalsIgnoreCase(outputTableName);
     }
 
     private boolean isBlank(String val) {
@@ -1812,5 +1809,13 @@ public class CsvProcessingServiceImpl implements CsvProcessingService {
         if (!isEmpty(taskRows)) {
             tableData.put(ClientConstants.TASK_TABLE, taskRows);
         }
+    }
+
+    @PostConstruct
+    public void init() {
+        this.clmIntimationCounter =
+                Optional.ofNullable(tableMappingConfiguration.getIntimation())
+                        .map(TableMappingConfiguration.Intimation::getStart)
+                        .orElse(1L);
     }
 }

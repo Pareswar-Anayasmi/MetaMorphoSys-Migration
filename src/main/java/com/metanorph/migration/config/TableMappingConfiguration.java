@@ -80,4 +80,12 @@ public class TableMappingConfiguration {
     }
 
     private Map<String, Map<String, String>> mappings;
+
+
+    private Intimation intimation;
+
+    @Data
+    public static class Intimation {
+        private long start = 1;
+    }
 }
